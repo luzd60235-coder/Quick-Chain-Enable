@@ -18,61 +18,32 @@ public static class OneClickInstance {
     return created;
   }
   public static bool ActivateExisting() {
-    // The first instance may hold the mutex a moment before WPF creates its
-    // top-level window. Retry briefly so a quick second click does not report
-    // a false "no window" error.
-    for (int attempt = 0; attempt < 30; attempt++) {
-      IntPtr hwnd = FindWindow(null, "一键桌面美化");
-      if (hwnd == IntPtr.Zero) {
-        EnumWindows((candidate, unused) => {
-          var title = new System.Text.StringBuilder(128);
-          GetWindowText(candidate, title, title.Capacity);
-          if (title.ToString() == "一键桌面美化") { hwnd = candidate; return false; }
-          return true;
-        }, IntPtr.Zero);
-      }
-      if (hwnd != IntPtr.Zero) {
-        ShowWindow(hwnd, 9);
-        SetForegroundWindow(hwnd);
+    IntPtr hwnd = FindWindow(null, "一键桌面美化");
+    if (hwnd == IntPtr.Zero) {
+      EnumWindows((candidate, unused) => {
+        var title = new System.Text.StringBuilder(128);
+        GetWindowText(candidate, title, title.Capacity);
+        if (title.ToString() == "一键桌面美化") { hwnd = candidate; return false; }
         return true;
-      }
-      Thread.Sleep(100);
+      }, IntPtr.Zero);
+    }
+    if (hwnd != IntPtr.Zero) {
+      ShowWindow(hwnd, 9);
+      SetForegroundWindow(hwnd);
+      return true;
     }
     return false;
   }
 }
 '@
-$appRoot = Split-Path -Parent $PSCommandPath
-$localDataRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'OneClickBeautify'
-$instanceMarkerCandidates = @(
-    (Join-Path $localDataRoot 'instance.pid'),
-    (Join-Path $appRoot 'instance.pid')
-)
-$instanceLockAcquired = [OneClickInstance]::Acquire()
-if (-not $instanceLockAcquired) {
-    if ([OneClickInstance]::ActivateExisting()) {
-        [Environment]::Exit(0)
+if (-not [OneClickInstance]::Acquire()) {
+    if (-not [OneClickInstance]::ActivateExisting()) {
+        [System.Windows.Forms.MessageBox]::Show('一键桌面美化已经在后台运行，但找不到窗口。请在任务管理器中结束旧实例后重试。', '一键桌面美化', 'OK', 'Warning') | Out-Null
     }
-    # Recover only a process previously identified as this app. This handles
-    # legacy instances that hold the mutex without exposing a window.
-    foreach ($markerPath in $instanceMarkerCandidates) {
-        if (-not (Test-Path -LiteralPath $markerPath)) { continue }
-        try {
-            $marker = [IO.File]::ReadAllText($markerPath).Trim().Split('|')
-            $oldPid = 0
-            $oldStartTicks = 0L
-            if ($marker.Count -ge 2 -and [int]::TryParse($marker[0], [ref]$oldPid) -and [long]::TryParse($marker[1], [ref]$oldStartTicks)) {
-                $oldProcess = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
-                if ($oldProcess -and $oldProcess.ProcessName -eq 'powershell' -and $oldProcess.StartTime.Ticks -eq $oldStartTicks) {
-                    Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue
-                }
-            }
-        } catch { }
-    }
-    Start-Sleep -Milliseconds 250
-    $instanceLockAcquired = [OneClickInstance]::Acquire()
+    [Environment]::Exit(0)
 }
 
+$appRoot = Split-Path -Parent $PSCommandPath
 $dataRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'OneClickBeautify'
 $probePath = Join-Path $dataRoot ([IO.Path]::GetRandomFileName())
 try {
@@ -85,18 +56,6 @@ try {
 }
 $configPath = Join-Path $dataRoot 'shortcuts.json'
 $legacyConfigPath = Join-Path $appRoot 'shortcut-config.json'
-$instanceMarkerPath = Join-Path $appRoot 'instance.pid'
-try {
-    $currentProcess = Get-Process -Id $PID
-    [IO.File]::WriteAllText($instanceMarkerPath, "$PID|$($currentProcess.StartTime.Ticks)", [Text.UTF8Encoding]::new($false))
-} catch {
-    $instanceMarkerPath = Join-Path $dataRoot 'instance.pid'
-    try {
-        [IO.Directory]::CreateDirectory($dataRoot) | Out-Null
-        $currentProcess = Get-Process -Id $PID
-        [IO.File]::WriteAllText($instanceMarkerPath, "$PID|$($currentProcess.StartTime.Ticks)", [Text.UTF8Encoding]::new($false))
-    } catch { }
-}
 
 $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="一键桌面美化" Width="1080" Height="720" MinWidth="900" MinHeight="600" WindowStartupLocation="CenterScreen" Background="#F3F5F8" FontFamily="Segoe UI">
@@ -181,6 +140,9 @@ $xaml = @'
                 <Border Background="White" BorderBrush="#E5EAF0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
                   <CheckBox Name="TaskbarToggle" Content="隐藏任务栏" IsChecked="False" FontSize="14" Foreground="#17202A"/>
                 </Border>
+                <Border Background="White" BorderBrush="#E5EAF0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                  <CheckBox Name="AutoHideTaskbarToggle" Content="自动隐藏任务栏" IsChecked="False" FontSize="14" Foreground="#17202A" ToolTip="开启后任务栏收起，鼠标移到屏幕底部自动浮现；关闭则任务栏始终显示。与「隐藏任务栏」互斥。"/>
+                </Border>
               </StackPanel>
             </StackPanel>
           </ScrollViewer>
@@ -219,6 +181,7 @@ $validationText = $window.FindName('ValidationText')
 $softwareList = $window.FindName('SoftwareList')
 $desktopIconsToggle = $window.FindName('DesktopIconsToggle')
 $taskbarToggle = $window.FindName('TaskbarToggle')
+$autoHideTaskbarToggle = $window.FindName('AutoHideTaskbarToggle')
 $addShortcutButton = $window.FindName('AddShortcutButton')
 $settingsButton = $window.FindName('SettingsButton')
 $saveButton = $window.FindName('SaveButton')
@@ -260,7 +223,6 @@ function Find-TranslucentTBPath {
     # available when the user has installed it separately, while still
     # supporting an older unpacked folder that contains the portable build.
     $candidates = @(
-        'D:\TranslucentTB-portable-x64\TranslucentTB.exe',
         (Join-Path $appRoot 'TranslucentTB-portable-x64\TranslucentTB.exe'),
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\TranslucentTB.exe'),
         (Join-Path $env:LOCALAPPDATA 'Programs\TranslucentTB\TranslucentTB.exe'),
@@ -271,6 +233,54 @@ function Find-TranslucentTBPath {
         $command = Get-Command 'TranslucentTB.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($command -and $command.Source) { $candidates += [string]$command.Source }
     } catch { }
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) { return $candidate }
+    }
+    return $null
+}
+
+function Find-WallpaperEnginePath {
+    # Wallpaper Engine ships through Steam and creates no Start-menu shortcut,
+    # so the installed-app scan above can never see it.  Locate it from its
+    # auto-start registry entry, then the Steam library folders.
+    $candidates = [System.Collections.ArrayList]::new()
+    try {
+        $run = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction Stop
+        $command = [string]$run.'WallpaperEngine'
+        if ($command) {
+            if ($command -match '"(.*?\.exe)"') { [void]$candidates.Add($Matches[1]) }
+            elseif ($command -match '(?i)^(.*?\.exe)(\s|$)') { [void]$candidates.Add($Matches[1]) }
+        }
+    } catch { }
+    $steamDirs = [System.Collections.Generic.List[string]]::new()
+    try {
+        $installed = [string](Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction Stop).SteamPath
+        if ($installed) { $steamDirs.Add($installed.TrimEnd('\')) }
+    } catch { }
+    foreach ($fallback in @('C:\Program Files (x86)\Steam', 'C:\Program Files\Steam', 'D:\Steam', 'E:\Steam', 'F:\Steam')) {
+        if (Test-Path -LiteralPath $fallback) { $steamDirs.Add($fallback) }
+    }
+    $libraryDirs = [System.Collections.Generic.List[string]]::new()
+    foreach ($steam in $steamDirs) {
+        if ($libraryDirs -notcontains $steam) { $libraryDirs.Add($steam) }
+        $vdf = Join-Path $steam 'steamapps\libraryfolders.vdf'
+        if (-not (Test-Path -LiteralPath $vdf)) { $vdf = Join-Path $steam 'config\libraryfolders.vdf' }
+        if (-not (Test-Path -LiteralPath $vdf)) { continue }
+        try {
+            Get-Content -LiteralPath $vdf -ErrorAction SilentlyContinue | ForEach-Object {
+                if ($_ -match '"path"\s+"(.*?)"') {
+                    $path = ($Matches[1] -replace '\\\\', '\').TrimEnd('\')
+                    if ($path -and $libraryDirs -notcontains $path) { $libraryDirs.Add($path) }
+                }
+            }
+        } catch { }
+    }
+    foreach ($library in $libraryDirs) {
+        $installDir = Join-Path $library 'steamapps\common\wallpaper_engine'
+        if (-not (Test-Path -LiteralPath $installDir)) { $installDir = Join-Path $library 'common\wallpaper_engine' }
+        [void]$candidates.Add((Join-Path $installDir 'wallpaper64.exe'))
+        [void]$candidates.Add((Join-Path $installDir 'wallpaper32.exe'))
+    }
     foreach ($candidate in $candidates) {
         if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) { return $candidate }
     }
@@ -317,7 +327,11 @@ $clashPath = Find-ClashVergePath
 if ($clashPath) {
     $fixedApps += [pscustomobject]@{ Name='Clash Verge'; Description='Clash Verge Rev'; Path=$clashPath }
 }
-$discoveredApps = @(Get-InstalledApps | Where-Object { $_.Name -notin @('Nexus','TranslucentTB') })
+$wallpaperPath = Find-WallpaperEnginePath
+if ($wallpaperPath) {
+    $fixedApps += [pscustomobject]@{ Name='Wallpaper Engine'; Description='Steam 动态壁纸'; Path=$wallpaperPath }
+}
+$discoveredApps = @(Get-InstalledApps | Where-Object { $_.Name -notin @('Nexus','TranslucentTB','Wallpaper Engine','wallpaper64','wallpaper32') })
 $apps = @($fixedApps + ($discoveredApps | Where-Object { $_.Name -ne 'Clash Verge' }))
 
 function Get-ConfigValue($object, [string]$name, $fallback) {
@@ -362,6 +376,7 @@ function New-Profile([string]$name = '新快捷键', [string]$tag = 'CtrlAltShif
         Key = $key
         DesktopIcons = $false
         Taskbar = $false
+        AutoHideTaskbar = $false
         Apps = $appState
     }
 }
@@ -376,6 +391,7 @@ function ConvertTo-Profile($source) {
     if ($profile.Key.Length -gt 1) { $profile.Key = $profile.Key.Substring(0,1) }
     $profile.DesktopIcons = [bool](Get-ConfigValue $source 'DesktopIcons' $false)
     $profile.Taskbar = [bool](Get-ConfigValue $source 'Taskbar' $false)
+    $profile.AutoHideTaskbar = [bool](Get-ConfigValue $source 'AutoHideTaskbar' $false)
     $savedApps = Get-ConfigValue $source 'Apps' $null
     foreach ($app in $apps) { $profile.Apps[$app.Name] = [bool](Get-ConfigValue $savedApps $app.Name $false) }
     return $profile
@@ -422,6 +438,7 @@ function Save-AllProfiles {
             Key = $_.Key
             DesktopIcons = [bool]$_.DesktopIcons
             Taskbar = [bool]$_.Taskbar
+            AutoHideTaskbar = [bool]$_.AutoHideTaskbar
             Apps = $appState
         }
     })
@@ -481,6 +498,7 @@ $hotkeyIdBase = 1200
 $hwndSource = $null
 $activeProfiles = @{}
 $script:allowClose = $false
+$script:savedWindowBounds = $null
 $script:trayIcon = $null
 
 function Set-Validation([string]$message, [string]$kind = 'normal') {
@@ -512,6 +530,11 @@ function Show-SaveFeedback([string]$message, [string]$kind = 'ok', [bool]$forceN
 function Show-MainWindow {
     $window.ShowInTaskbar = $true
     $window.WindowState = 'Normal'
+    if ($script:savedWindowBounds) {
+        $window.Left = [double]$script:savedWindowBounds.Left
+        $window.Top = [double]$script:savedWindowBounds.Top
+        $script:savedWindowBounds = $null
+    }
     $window.Activate()
     if ($script:trayIcon) { $script:trayIcon.Visible = $true }
 }
@@ -585,6 +608,7 @@ function Set-UiFromProfile($profile) {
     $keyBox.Text = $profile.Key
     $desktopIconsToggle.IsChecked = [bool]$profile.DesktopIcons
     $taskbarToggle.IsChecked = [bool]$profile.Taskbar
+    $autoHideTaskbarToggle.IsChecked = [bool]$profile.AutoHideTaskbar
     foreach ($app in $apps) { $checks[$app.Name].IsChecked = [bool]$profile.Apps[$app.Name] }
     $selectedTitle.Text = $profile.Name
     $selectedHotkey.Text = Get-ProfileHotkey $profile
@@ -600,6 +624,7 @@ function Capture-UiToProfile($profile) {
     $profile.Key = $key.Substring(0,1)
     $profile.DesktopIcons = [bool]$desktopIconsToggle.IsChecked
     $profile.Taskbar = [bool]$taskbarToggle.IsChecked
+    $profile.AutoHideTaskbar = [bool]$autoHideTaskbarToggle.IsChecked
     foreach ($app in $apps) { $profile.Apps[$app.Name] = [bool]$checks[$app.Name].IsChecked }
 }
 
@@ -710,14 +735,22 @@ function Set-DesktopIconsVisible([bool]$visible) {
 }
 
 function Set-TaskbarVisible([bool]$visible) {
-    $showCommand = 0
-    if ($visible) { $showCommand = 5 }
-    foreach ($className in @('Shell_TrayWnd', 'Shell_SecondaryTrayWnd')) {
-        $taskbar = [TaskbarApi]::FindWindow($className, $null)
-        if ($taskbar -eq [IntPtr]::Zero) { continue }
+    $taskbar = [TaskbarApi]::FindWindow('Shell_TrayWnd', $null)
+    if ($taskbar -ne [IntPtr]::Zero) {
+        $showCommand = 0
+        if ($visible) { $showCommand = 5 }
         [void][TaskbarApi]::ShowWindow($taskbar, $showCommand)
-        [void][TaskbarApi]::ShowWindowAsync($taskbar, $showCommand)
     }
+}
+
+function Set-TaskbarAutoHide([bool]$enabled) {
+    # ABM_SETSTATE flips the same system state as Settings > Taskbar >
+    # "automatically hide the taskbar": Explorer stows the bar and slides it
+    # back in when the pointer touches the screen edge.  Only write when the
+    # current state differs so toggling profiles never blinks the taskbar.
+    try {
+        if ([TaskbarAutoHideApi]::GetAutoHide() -ne $enabled) { [void][TaskbarAutoHideApi]::SetAutoHide($enabled) }
+    } catch { }
 }
 
 function Start-ProfileApps($profile) {
@@ -764,13 +797,19 @@ function Start-ProfileApps($profile) {
 function Update-DesktopPresentation {
     $hideIcons = $false
     $hideTaskbar = $false
+    $autoHideTaskbar = $false
     foreach ($state in @($script:activeProfiles.Values)) {
         if ([bool]$state.Profile.DesktopIcons) { $hideIcons = $true }
         if ([bool]$state.Profile.Taskbar) { $hideTaskbar = $true }
+        if ([bool]$state.Profile.AutoHideTaskbar) { $autoHideTaskbar = $true }
     }
     $script:desktopIconsError = $null
     Set-DesktopIconsVisible (-not $hideIcons)
     Set-TaskbarVisible (-not $hideTaskbar)
+    # Full hide wins over auto hide: a ShowWindow-hidden bar cannot slide in
+    # on hover, so the system auto-hide flag is only meaningful while the bar
+    # itself is visible.
+    Set-TaskbarAutoHide ((-not $hideTaskbar) -and $autoHideTaskbar)
 }
 
 function Stop-ProfileApps([string]$profileId, $state) {
@@ -802,6 +841,7 @@ function Exit-BeautyMode {
     $script:desktopIconsError = $null
     Set-DesktopIconsVisible $true
     Set-TaskbarVisible $true
+    Set-TaskbarAutoHide $false
 }
 
 function Invoke-Profile($profile) {
@@ -953,6 +993,8 @@ $keyBox.Add_TextChanged({
         if ($selectedIndex -lt $listRows.Count) { $listRows[$selectedIndex].HotkeyText.Text = Get-ProfileHotkey $preview }
     }
 })
+$taskbarToggle.Add_Checked({ if ($autoHideTaskbarToggle.IsChecked) { $autoHideTaskbarToggle.IsChecked = $false } })
+$autoHideTaskbarToggle.Add_Checked({ if ($taskbarToggle.IsChecked) { $taskbarToggle.IsChecked = $false } })
 $saveButton.Add_Click({ try { Save-CurrentProfile } catch { Set-Validation ('保存失败：' + $_.Exception.Message) 'error' } })
 $addShortcutButton.Add_Click({
     try {
@@ -998,7 +1040,6 @@ using System.Runtime.InteropServices;
 public static class TaskbarApi {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int command);
-  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hwnd, int command);
 }
 '@
 Add-Type @'
@@ -1016,6 +1057,30 @@ public static class DesktopIconApi {
 }
 '@
 
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class TaskbarAutoHideApi {
+  [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] private struct APPBARDATA {
+    public int cbSize; public IntPtr hWnd; public int uCallbackMessage; public int uEdge; public RECT rc; public int lParam;
+  }
+  [DllImport("shell32.dll")] private static extern uint SHAppBarMessage(int dwMessage, ref APPBARDATA pData);
+  private const int ABM_GETSTATE = 4, ABM_SETSTATE = 10, ABS_AUTOHIDE = 1, ABS_ALWAYSONTOP = 2;
+  public static int GetState() {
+    APPBARDATA d = new APPBARDATA();
+    d.cbSize = Marshal.SizeOf(typeof(APPBARDATA));
+    return (int)SHAppBarMessage(ABM_GETSTATE, ref d);
+  }
+  public static bool GetAutoHide() { return (GetState() & ABS_AUTOHIDE) == ABS_AUTOHIDE; }
+  public static bool SetAutoHide(bool enabled) {
+    APPBARDATA d = new APPBARDATA();
+    d.cbSize = Marshal.SizeOf(typeof(APPBARDATA));
+    d.lParam = enabled ? ABS_AUTOHIDE : ABS_ALWAYSONTOP;
+    return SHAppBarMessage(ABM_SETSTATE, ref d) != 0;
+  }
+}
+'@
 $window.Add_SourceInitialized({
     $helper = New-Object Windows.Interop.WindowInteropHelper $window
     $script:hwndSource = [Windows.Interop.HwndSource]::FromHwnd($helper.Handle)
@@ -1040,11 +1105,18 @@ $window.Add_Closing([System.ComponentModel.CancelEventHandler]{
         # hotkey listener alive and moves the app to the notification area.
         $eventArgs.Cancel = $true
         if ($script:trayIcon) { $script:trayIcon.Visible = $true }
-        # Keep the modal ShowDialog alive.  Hiding a dialog during Closing can
-        # end ShowDialog; removing it from the taskbar and minimizing it gives
-        # the same user experience without terminating the hotkey listener.
+        # Keep the modal ShowDialog alive: hiding a window during Closing can
+        # end ShowDialog.  A minimized window without a taskbar button, however,
+        # is drawn by the shell as a small floating strip in the bottom-left
+        # corner of the screen.  Park the window off-screen instead (still in
+        # Normal state) and remember its position for the tray "打开" restore.
+        if ($sender.WindowState -ne 'Normal') { $sender.WindowState = 'Normal' }
+        if ($sender.Left -gt -30000) {
+            $script:savedWindowBounds = [pscustomobject]@{ Left = $sender.Left; Top = $sender.Top }
+        }
         $sender.ShowInTaskbar = $false
-        $sender.WindowState = 'Minimized'
+        $sender.Left = -32000
+        $sender.Top = -32000
     }
 })
 $window.Add_Closed({
@@ -1055,11 +1127,6 @@ $window.Add_Closed({
         $script:trayIcon.Dispose()
         $script:trayIcon = $null
     }
-    try {
-        if ((Test-Path -LiteralPath $instanceMarkerPath) -and ([IO.File]::ReadAllText($instanceMarkerPath).Trim() -like "$PID|*")) {
-            Remove-Item -LiteralPath $instanceMarkerPath -Force -ErrorAction SilentlyContinue
-        }
-    } catch { }
 })
 
 Refresh-ShortcutList
