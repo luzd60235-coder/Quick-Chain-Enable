@@ -56,7 +56,7 @@ public static class OneLAppId {
 '@
 [void][OneLAppId]::SetCurrentProcessExplicitAppUserModelID('OneL.DesktopBeautify')
 
-$appRoot = Split-Path -Parent $PSCommandPath
+$appRoot = if ($env:ONEL_INSTALL_ROOT -and (Test-Path -LiteralPath $env:ONEL_INSTALL_ROOT)) { $env:ONEL_INSTALL_ROOT.TrimEnd('\') } else { Split-Path -Parent $PSCommandPath }
 $dataRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'OneClickBeautify'
 $probePath = Join-Path $dataRoot ([IO.Path]::GetRandomFileName())
 try {
@@ -168,14 +168,15 @@ $xaml = @'
   </Window.Resources>
   <Grid Margin="22">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-    <DockPanel Grid.Row="0" Margin="0,0,0,18">
+    <DockPanel Grid.Row="0" Margin="0,0,0,18" LastChildFill="False">
       <StackPanel DockPanel.Dock="Left">
         <TextBlock Text="OneL" FontSize="26" FontWeight="SemiBold" Foreground="#3E2A33"/>
         <TextBlock Text="把常用桌面状态收进快捷键，工作和美化一键切换" Margin="0,5,0,0" Foreground="#8B7A85" FontSize="13"/>
       </StackPanel>
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
         <Button Name="AddShortcutButton" Content="＋ 新增快捷键" Background="#C0EE6FA8" Foreground="White" BorderThickness="0" ToolTip="创建一组新的快捷键配置"/>
-        <Button Name="SettingsButton" Content="⚙ 设置" Background="#C0FFFFFF" Foreground="#4A3A42" BorderBrush="#EFC7D9" ToolTip="打开软件设置"/>
+        <Button Name="SkinButton" Content="✦ 皮肤" Background="#C0FFFFFF" Foreground="#4A3A42" BorderBrush="#EFC7D9" ToolTip="更换启动和关闭横幅皮肤"/>
+        <Button Name="SettingsButton" Content="⚙ 设置" Background="#C0FFFFFF" Foreground="#4A3A42" BorderBrush="#EFC7D9" ToolTip="打开软件设置" Margin="0"/>
       </StackPanel>
     </DockPanel>
     <Grid Grid.Row="1">
@@ -282,6 +283,7 @@ $desktopIconsToggle = $window.FindName('DesktopIconsToggle')
 $taskbarToggle = $window.FindName('TaskbarToggle')
 $autoHideTaskbarToggle = $window.FindName('AutoHideTaskbarToggle')
 $addShortcutButton = $window.FindName('AddShortcutButton')
+$skinButton = $window.FindName('SkinButton')
 $settingsButton = $window.FindName('SettingsButton')
 $saveButton = $window.FindName('SaveButton')
 $deleteShortcutButton = $window.FindName('DeleteShortcutButton')
@@ -310,7 +312,7 @@ function Attach-HoverScale($button) {
     $button.Add_MouseEnter({ param($sender, $e) Start-HoverScale $sender 1.06 })
     $button.Add_MouseLeave({ param($sender, $e) Start-HoverScale $sender 1.0 })
 }
-foreach ($hoverButton in @($addShortcutButton, $settingsButton, $saveButton, $deleteShortcutButton)) { Attach-HoverScale $hoverButton }
+foreach ($hoverButton in @($addShortcutButton, $skinButton, $settingsButton, $saveButton, $deleteShortcutButton)) { Attach-HoverScale $hoverButton }
 
 function Get-InstalledApps {
     $items = [System.Collections.ArrayList]::new()
@@ -552,7 +554,10 @@ $settings = [ordered]@{
     StartMinimized = [bool](Get-ConfigValue $settingsSource 'StartMinimized' $false)
     ShowSaveNotification = [bool](Get-ConfigValue $settingsSource 'ShowSaveNotification' $true)
     LastSelectedId = [string](Get-ConfigValue $settingsSource 'LastSelectedId' '')
+    BannerSkin = [string](Get-ConfigValue $settingsSource 'BannerSkin' 'PinkCyan')
 }
+$bannerSkinIds = @('PinkCyan', 'Ocean', 'Sunset', 'Forest', 'Violet', 'RagdollCat')
+if ($settings.BannerSkin -notin $bannerSkinIds) { $settings.BannerSkin = 'PinkCyan' }
 
 function Save-AllProfiles {
     $shortcutData = @($profiles | ForEach-Object {
@@ -660,53 +665,182 @@ function Format-RegistrationErrors($errors) {
 }
 
 $script:bannerWindow = $null
-function Show-ModeBanner([string]$text, [string]$kind) {
-    # Soft pill banner sliding in at the top-center of the work area to
-    # announce a mode switch: pink-cyan gradient for "on", white-pink for
-    # "off".  Fades in, holds two seconds, fades out; never steals focus.
+$script:catSoundPlayer = $null
+
+function ConvertTo-BannerColor([string]$value) {
+    return [System.Windows.Media.ColorConverter]::ConvertFromString($value)
+}
+
+function Get-BannerPalette([string]$skinId) {
+    switch ($skinId) {
+        'Ocean'  { return [pscustomobject]@{ Start='#2563EB'; End='#22D3EE'; Foreground='#FFFFFF'; Shadow='#2563EB' } }
+        'Sunset' { return [pscustomobject]@{ Start='#F97316'; End='#EC4899'; Foreground='#FFFFFF'; Shadow='#EC4899' } }
+        'Forest' { return [pscustomobject]@{ Start='#15803D'; End='#84CC16'; Foreground='#FFFFFF'; Shadow='#15803D' } }
+        'Violet' { return [pscustomobject]@{ Start='#7C3AED'; End='#C084FC'; Foreground='#FFFFFF'; Shadow='#7C3AED' } }
+        'RagdollCat' { return [pscustomobject]@{ Start='#FFF7FB'; End='#DFF6FA'; Foreground='#3E2A33'; Shadow='#8ECBD5' } }
+        default  { return [pscustomobject]@{ Start='#EE6FA8'; End='#35A0B8'; Foreground='#FFFFFF'; Shadow='#EE6FA8' } }
+    }
+}
+
+function New-CatSoundFile([string]$path, [string]$voice) {
+    $sampleRate = 22050
+    $duration = if ($voice -eq 'happy') { 0.56 } else { 0.72 }
+    $sampleCount = [int]($sampleRate * $duration)
+    $stream = [IO.File]::Open($path, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::Read)
+    $writer = New-Object IO.BinaryWriter($stream)
+    try {
+        $dataLength = $sampleCount * 2
+        $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF'))
+        $writer.Write([int](36 + $dataLength))
+        $writer.Write([Text.Encoding]::ASCII.GetBytes('WAVEfmt '))
+        $writer.Write([int]16); $writer.Write([int16]1); $writer.Write([int16]1)
+        $writer.Write([int]$sampleRate); $writer.Write([int]($sampleRate * 2))
+        $writer.Write([int16]2); $writer.Write([int16]16)
+        $writer.Write([Text.Encoding]::ASCII.GetBytes('data')); $writer.Write([int]$dataLength)
+        $phase = 0.0
+        for ($i = 0; $i -lt $sampleCount; $i++) {
+            $t = $i / [double]$sampleCount
+            if ($voice -eq 'happy') {
+                $frequency = 430 + (420 * $t) + (55 * [Math]::Sin(8 * [Math]::PI * $t))
+                $amplitude = 0.25 * [Math]::Sin([Math]::PI * $t)
+            } else {
+                $frequency = 270 - (115 * $t) + (18 * [Math]::Sin(5 * [Math]::PI * $t))
+                $amplitude = 0.22 * [Math]::Sin([Math]::PI * $t)
+            }
+            $phase += 2 * [Math]::PI * $frequency / $sampleRate
+            $sample = $amplitude * ([Math]::Sin($phase) + 0.28 * [Math]::Sin(2 * $phase))
+            $writer.Write([int16]([Math]::Max(-32767, [Math]::Min(32767, $sample * 32767))))
+        }
+    } finally {
+        $writer.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Play-CatVoice([string]$kind) {
+    try {
+        [IO.Directory]::CreateDirectory($dataRoot) | Out-Null
+        $voice = if ($kind -eq 'on') { 'happy' } else { 'low' }
+        $soundFileName = if ($voice -eq 'happy') { 'OneL-cat-happy.wav' } else { 'OneL-cat-low.wav' }
+        $soundPath = Join-Path $dataRoot $soundFileName
+        if (-not (Test-Path -LiteralPath $soundPath)) { New-CatSoundFile $soundPath $voice }
+        if ($script:catSoundPlayer) { try { $script:catSoundPlayer.Stop() } catch { } }
+        $script:catSoundPlayer = New-Object System.Media.SoundPlayer($soundPath)
+        $script:catSoundPlayer.Play()
+    } catch { }
+}
+
+function New-RagdollCatVisual {
+    $catXaml = @'
+<Canvas xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Width="78" Height="54" ClipToBounds="False">
+  <Path Data="M8,41 C1,33 5,23 13,28 C8,31 9,35 15,37" Stroke="#8C6F78" StrokeThickness="4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent"/>
+  <Ellipse Canvas.Left="8" Canvas.Top="25" Width="56" Height="25" Fill="#F5EEE9" Stroke="#D9C7C5" StrokeThickness="1.2"/>
+  <Ellipse Canvas.Left="47" Canvas.Top="34" Width="19" Height="13" Fill="#8C6F78" Opacity="0.78"/>
+  <Grid Name="CatHead" Canvas.Left="17" Canvas.Top="1" Width="43" Height="42" RenderTransformOrigin="0.5,0.72">
+    <Path Data="M4,13 L7,0 L18,9 Z" Fill="#8C6F78" Stroke="#6F535E" StrokeThickness="1"/>
+    <Path Data="M39,13 L36,0 L25,9 Z" Fill="#8C6F78" Stroke="#6F535E" StrokeThickness="1"/>
+    <Ellipse Margin="2,6,2,0" Width="39" Height="34" Fill="#F7F1ED" Stroke="#D9C7C5" StrokeThickness="1.2"/>
+    <Ellipse Margin="4,10,22,8" Fill="#B29AA0" Opacity="0.62"/>
+    <Ellipse Margin="22,10,4,8" Fill="#B29AA0" Opacity="0.62"/>
+    <Ellipse Margin="10,19,25,15" Fill="#4AA9C7" Stroke="#FFFFFF" StrokeThickness="0.8"/>
+    <Ellipse Margin="25,19,10,15" Fill="#4AA9C7" Stroke="#FFFFFF" StrokeThickness="0.8"/>
+    <Ellipse Margin="13,21,27,17" Fill="#253945"/>
+    <Ellipse Margin="27,21,13,17" Fill="#253945"/>
+    <Path Data="M19,28 L24,28 L21.5,31 Z" Fill="#D97C98"/>
+    <Path Data="M21.5,31 C19,34 17,32 16,31 M21.5,31 C24,34 26,32 27,31" Stroke="#6F535E" StrokeThickness="1" Fill="Transparent" StrokeStartLineCap="Round"/>
+  </Grid>
+</Canvas>
+'@
+    $catReader = New-Object System.Xml.XmlNodeReader ([xml]$catXaml)
+    return [Windows.Markup.XamlReader]::Load($catReader)
+}
+
+function Start-CatBannerAnimation($cat, [string]$kind) {
+    $head = $cat.FindName('CatHead')
+    if (-not $head) { return }
+    $headGroup = New-Object System.Windows.Media.TransformGroup
+    $headRotate = New-Object System.Windows.Media.RotateTransform
+    $headScale = New-Object System.Windows.Media.ScaleTransform(1, 1)
+    $headDrop = New-Object System.Windows.Media.TranslateTransform
+    [void]$headGroup.Children.Add($headRotate); [void]$headGroup.Children.Add($headScale); [void]$headGroup.Children.Add($headDrop)
+    $head.RenderTransform = $headGroup
+    $angleFrames = New-Object System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames
+    $angleFrames.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(650))
+    $points = if ($kind -eq 'on') { @(@(0,0), @(-14,140), @(13,300), @(-7,460), @(0,650)) } else { @(@(0,0), @(2,220), @(5,650)) }
+    foreach ($point in $points) {
+        $frame = New-Object System.Windows.Media.Animation.SplineDoubleKeyFrame
+        $frame.Value = [double]$point[0]
+        $frame.KeyTime = [System.Windows.Media.Animation.KeyTime]::FromTimeSpan([TimeSpan]::FromMilliseconds([double]$point[1]))
+        $frame.KeySpline = New-Object System.Windows.Media.Animation.KeySpline(0.2, 0.0, 0.2, 1.0)
+        [void]$angleFrames.KeyFrames.Add($frame)
+    }
+    $headRotate.BeginAnimation([System.Windows.Media.RotateTransform]::AngleProperty, $angleFrames)
+    if ($kind -eq 'off') {
+        $drop = New-Object System.Windows.Media.Animation.DoubleAnimation
+        $drop.To = 5; $drop.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(650))
+        $drop.EasingFunction = New-Object System.Windows.Media.Animation.CubicEase
+        $headDrop.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $drop)
+        $nod = New-Object System.Windows.Media.Animation.DoubleAnimation
+        $nod.To = 0.82; $nod.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(650))
+        $headScale.BeginAnimation([System.Windows.Media.ScaleTransform]::ScaleYProperty, $nod)
+    } else {
+        $catMove = New-Object System.Windows.Media.TranslateTransform
+        $cat.RenderTransform = $catMove
+        $bounce = New-Object System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames
+        $bounce.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(650))
+        foreach ($point in @(@(0,0), @(-4,220), @(0,500))) {
+            $frame = New-Object System.Windows.Media.Animation.SplineDoubleKeyFrame
+            $frame.Value = [double]$point[0]
+            $frame.KeyTime = [System.Windows.Media.Animation.KeyTime]::FromTimeSpan([TimeSpan]::FromMilliseconds([double]$point[1]))
+            [void]$bounce.KeyFrames.Add($frame)
+        }
+        $catMove.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $bounce)
+    }
+}
+
+function Show-ModeBanner([string]$text, [string]$kind, [string]$skinOverride = '') {
+    # The five colour themes keep the original pill and motion intact.  The
+    # sixth theme swaps only its leading glyph for an animated ragdoll cat.
     try {
         if ($script:bannerWindow) { try { $script:bannerWindow.Close() } catch { } }
+        $skinId = if ($skinOverride -in $bannerSkinIds) { $skinOverride } elseif ($settings.BannerSkin -in $bannerSkinIds) { $settings.BannerSkin } else { 'PinkCyan' }
+        $palette = Get-BannerPalette $skinId
         $w = New-Object System.Windows.Window
         $w.WindowStyle = [System.Windows.WindowStyle]::None
         $w.ResizeMode = [System.Windows.ResizeMode]::NoResize
         $w.AllowsTransparency = $true
         $w.Background = [System.Windows.Media.Brushes]::Transparent
-        $w.Topmost = $true
-        $w.ShowInTaskbar = $false
-        $w.ShowActivated = $false
-        $w.IsHitTestVisible = $false
+        $w.Topmost = $true; $w.ShowInTaskbar = $false; $w.ShowActivated = $false; $w.IsHitTestVisible = $false
         $w.SizeToContent = [System.Windows.SizeToContent]::WidthAndHeight
         $border = New-Object System.Windows.Controls.Border
-        $border.CornerRadius = [System.Windows.CornerRadius]::new(21)
-        $border.Padding = [System.Windows.Thickness]::new(22, 10, 22, 10)
+        $border.CornerRadius = [System.Windows.CornerRadius]::new(23)
+        $border.Padding = if ($skinId -eq 'RagdollCat') { [System.Windows.Thickness]::new(14, 4, 22, 4) } else { [System.Windows.Thickness]::new(22, 10, 22, 10) }
         $grad = New-Object System.Windows.Media.LinearGradientBrush
-        $grad.StartPoint = [System.Windows.Point]::new(0, 0)
-        $grad.EndPoint = [System.Windows.Point]::new(1, 0)
-        if ($kind -eq 'on') {
-            [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new([System.Windows.Media.Color]::FromRgb(238, 111, 168), 0))
-            [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new([System.Windows.Media.Color]::FromRgb(53, 160, 184), 1))
-            $fg = [System.Windows.Media.Brushes]::White
-            $shadowColor = [System.Windows.Media.Color]::FromRgb(238, 111, 168)
-        } else {
-            [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new([System.Windows.Media.Color]::FromRgb(255, 255, 255), 0))
-            [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new([System.Windows.Media.Color]::FromRgb(251, 227, 238), 1))
-            $fg = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(62, 42, 51))
-            $shadowColor = [System.Windows.Media.Color]::FromRgb(190, 160, 180)
-        }
+        $grad.StartPoint = [System.Windows.Point]::new(0, 0); $grad.EndPoint = [System.Windows.Point]::new(1, 0)
+        [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new((ConvertTo-BannerColor $palette.Start), 0))
+        [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new((ConvertTo-BannerColor $palette.End), 1))
         $border.Background = $grad
         $shadow = New-Object System.Windows.Media.Effects.DropShadowEffect
-        $shadow.BlurRadius = 24; $shadow.ShadowDepth = 0; $shadow.Opacity = 0.35; $shadow.Color = $shadowColor
+        $shadow.BlurRadius = 24; $shadow.ShadowDepth = 0; $shadow.Opacity = 0.35; $shadow.Color = ConvertTo-BannerColor $palette.Shadow
         $border.Effect = $shadow
+        $fg = New-Object System.Windows.Media.SolidColorBrush((ConvertTo-BannerColor $palette.Foreground))
         $stack = New-Object System.Windows.Controls.StackPanel
         $stack.Orientation = [System.Windows.Controls.Orientation]::Horizontal
-        $glyph = New-Object System.Windows.Controls.TextBlock
-        $glyph.Text = if ($kind -eq 'on') { '⚡' } else { '✓' }
-        $glyph.FontSize = 17; $glyph.Foreground = $fg; $glyph.VerticalAlignment = 'Center'; $glyph.Margin = [System.Windows.Thickness]::new(0, 0, 10, 0)
+        $cat = $null
+        if ($skinId -eq 'RagdollCat') {
+            $cat = New-RagdollCatVisual
+            $cat.Margin = [System.Windows.Thickness]::new(0, 0, 8, 0)
+            [void]$stack.Children.Add($cat)
+        } else {
+            $glyph = New-Object System.Windows.Controls.TextBlock
+            $glyph.Text = if ($kind -eq 'on') { '⚡' } else { '✓' }
+            $glyph.FontSize = 17; $glyph.Foreground = $fg; $glyph.VerticalAlignment = 'Center'; $glyph.Margin = [System.Windows.Thickness]::new(0, 0, 10, 0)
+            [void]$stack.Children.Add($glyph)
+        }
         $label = New-Object System.Windows.Controls.TextBlock
         $label.Text = $text; $label.FontSize = 16; $label.FontWeight = [System.Windows.FontWeights]::SemiBold; $label.Foreground = $fg; $label.VerticalAlignment = 'Center'
-        [void]$stack.Children.Add($glyph); [void]$stack.Children.Add($label)
-        $border.Child = $stack
-        $w.Content = $border
+        [void]$stack.Children.Add($label)
+        $border.Child = $stack; $w.Content = $border
         $w.Add_ContentRendered({
             param($sender, $e)
             try {
@@ -715,44 +849,49 @@ function Show-ModeBanner([string]$text, [string]$kind) {
                 $sender.Top = $wa.Y + 26
             } catch { }
         })
-        $w.Add_Closed({ param($sender, $e) if ($script:bannerWindow -eq $sender) { $script:bannerWindow = $null } })
+        $w.Tag = [pscustomobject]@{ Timer = $null; Closer = $null }
+        $w.Add_Closed({
+            param($sender, $e)
+            if ($sender.Tag.Timer) { $sender.Tag.Timer.Stop() }
+            if ($sender.Tag.Closer) { $sender.Tag.Closer.Stop() }
+            if ($script:bannerWindow -eq $sender) { $script:bannerWindow = $null }
+        })
         $tt = New-Object System.Windows.Media.TranslateTransform(0, -14)
-        $border.RenderTransform = $tt
-        $w.Opacity = 0
-        $script:bannerWindow = $w
+        $border.RenderTransform = $tt; $w.Opacity = 0; $script:bannerWindow = $w
         $w.Show()
+        if ($cat) { Start-CatBannerAnimation $cat $kind; Play-CatVoice $kind }
         $ease = New-Object System.Windows.Media.Animation.CubicEase
         $ease.EasingMode = 'EaseOut'
         $fade = New-Object System.Windows.Media.Animation.DoubleAnimation
-        $fade.To = 1
-        $fade.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(240))
-        $fade.EasingFunction = $ease
+        $fade.To = 1; $fade.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(240)); $fade.EasingFunction = $ease
         $w.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
         $slide = New-Object System.Windows.Media.Animation.DoubleAnimation
-        $slide.To = 0
-        $slide.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(320))
-        $slide.EasingFunction = $ease
+        $slide.To = 0; $slide.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(320)); $slide.EasingFunction = $ease
         $tt.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $slide)
         $timer = New-Object System.Windows.Threading.DispatcherTimer
-        $timer.Interval = [TimeSpan]::FromMilliseconds(2000)
+        $timer.Tag = $w
+        $w.Tag.Timer = $timer
+        $timer.Interval = [TimeSpan]::FromMilliseconds(2100)
         $timer.Add_Tick({
             param($s, $e)
-            $s.Stop()
-            $win = $script:bannerWindow
+            $s.Stop(); $win = $s.Tag
             if (-not $win) { return }
             try {
                 $out = New-Object System.Windows.Media.Animation.DoubleAnimation
-                $out.To = 0
-                $out.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(420))
+                $out.To = 0; $out.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(420))
                 $win.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $out)
             } catch { }
             $closer = New-Object System.Windows.Threading.DispatcherTimer
+            $closer.Tag = $win
+            $win.Tag.Closer = $closer
             $closer.Interval = [TimeSpan]::FromMilliseconds(480)
-            $closer.Add_Tick({ param($c, $e2) $c.Stop(); try { if ($script:bannerWindow) { $script:bannerWindow.Close() } } catch { } })
+            $closer.Add_Tick({ param($c, $e2) $c.Stop(); try { if ($c.Tag) { $c.Tag.Close() } } catch { } })
             $closer.Start()
         })
         $timer.Start()
-    } catch { }
+    } catch {
+        try { Add-Content -LiteralPath (Join-Path $appRoot 'launcher.log') -Value ((Get-Date -Format s) + ' banner-error=' + $_.Exception) -Encoding UTF8 } catch { }
+    }
 }
 
 function Show-SaveFeedback([string]$message, [string]$kind = 'ok', [bool]$forceNotification = $false) {
@@ -1151,10 +1290,128 @@ function Set-StartWithWindows([bool]$enabled) {
     $runPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
     $valueName = 'OneClickBeautify'
     if ($enabled) {
-        $exe = Join-Path $appRoot 'OneL.exe'
+        $exe = if ($env:ONEL_EXE_PATH -and (Test-Path -LiteralPath $env:ONEL_EXE_PATH)) { $env:ONEL_EXE_PATH } else { Join-Path $appRoot 'OneL.exe' }
         if (-not (Test-Path -LiteralPath $exe)) { $exe = Join-Path $appRoot '一键桌面美化.exe' }
         if (Test-Path -LiteralPath $exe) { New-Item -Path $runPath -Force | Out-Null; Set-ItemProperty -Path $runPath -Name $valueName -Value ('"' + $exe + '"') }
     } else { Remove-ItemProperty -Path $runPath -Name $valueName -ErrorAction SilentlyContinue }
+}
+
+function Show-SkinPicker {
+    $pickerXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="横幅皮肤 · OneL" Width="660" Height="570" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#FDF2F7" FontFamily="Segoe UI">
+  <Grid Margin="24">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel>
+      <TextBlock Text="横幅皮肤" FontSize="24" FontWeight="SemiBold" Foreground="#3E2A33"/>
+      <TextBlock Text="五款只换色，一个会撒娇。给你的模式切换加点仪式感。" FontSize="13" Foreground="#8B7A85" Margin="0,6,0,18"/>
+    </StackPanel>
+    <UniformGrid Name="SkinCards" Grid.Row="1" Rows="3" Columns="2"/>
+    <StackPanel Grid.Row="2" Margin="0,14,0,0">
+      <TextBlock Name="SkinSelectionText" Foreground="#6E5A66" FontSize="13" Margin="0,0,0,12"/>
+      <DockPanel LastChildFill="False">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+          <Button Name="PreviewSkinOnButton" Content="预览启动" Padding="14,8" Margin="0,0,8,0"/>
+          <Button Name="PreviewSkinOffButton" Content="预览关闭" Padding="14,8"/>
+        </StackPanel>
+        <Button Name="SaveSkinButton" DockPanel.Dock="Right" Content="保存皮肤" Padding="18,8" Background="#C0EE6FA8" Foreground="White" BorderThickness="0"/>
+        <Button Name="CancelSkinButton" DockPanel.Dock="Right" Content="取消" Padding="14,8" Margin="0,0,8,0"/>
+      </DockPanel>
+    </StackPanel>
+  </Grid>
+</Window>
+'@
+    $pickerReader = New-Object System.Xml.XmlNodeReader ([xml]$pickerXaml)
+    $picker = [Windows.Markup.XamlReader]::Load($pickerReader)
+    $picker.Owner = $window
+    $picker.Resources.Add([Windows.Controls.Button], $window.Resources[[Windows.Controls.Button]])
+    $cards = $picker.FindName('SkinCards')
+    $selectionText = $picker.FindName('SkinSelectionText')
+    $state = [pscustomobject]@{ SelectedId = $settings.BannerSkin; Cards = [Collections.ArrayList]::new(); SelectionText = $selectionText }
+    $skinItems = @(
+        [pscustomobject]@{ Id='PinkCyan'; Name='樱粉晴空'; Detail='粉色 × 青色 · 只换色' },
+        [pscustomobject]@{ Id='Ocean'; Name='深海蓝'; Detail='海蓝 × 天青 · 只换色' },
+        [pscustomobject]@{ Id='Sunset'; Name='落日橙'; Detail='橙色 × 玫红 · 只换色' },
+        [pscustomobject]@{ Id='Forest'; Name='森林绿'; Detail='森林 × 青柠 · 只换色' },
+        [pscustomobject]@{ Id='Violet'; Name='星云紫'; Detail='紫色 × 淡紫 · 只换色' },
+        [pscustomobject]@{ Id='RagdollCat'; Name='动态布偶猫'; Detail='甩头喵 / 低头呜 · 有声音' }
+    )
+    foreach ($item in $skinItems) {
+        $palette = Get-BannerPalette $item.Id
+        $card = New-Object System.Windows.Controls.Button
+        $card.Margin = [Windows.Thickness]::new(5)
+        $card.Padding = [Windows.Thickness]::new(12)
+        $card.HorizontalContentAlignment = 'Stretch'
+        $card.Background = [Windows.Media.Brushes]::White
+        $card.BorderThickness = [Windows.Thickness]::new(2)
+        $card.BorderBrush = [Windows.Media.BrushConverter]::new().ConvertFromString('#EFC7D9')
+        $card.ToolTip = '选择并预览；点击保存皮肤后应用'
+        [System.Windows.Automation.AutomationProperties]::SetAutomationId($card, ('SkinCard_' + $item.Id))
+        [System.Windows.Automation.AutomationProperties]::SetName($card, $item.Name)
+        $card.Tag = [pscustomobject]@{ Item = $item; State = $state }
+        $content = New-Object Windows.Controls.StackPanel
+        $swatch = New-Object Windows.Controls.Border
+        $swatch.CornerRadius = [Windows.CornerRadius]::new(17)
+        $swatch.Height = 34; $swatch.Margin = [Windows.Thickness]::new(0,0,0,6)
+        $brush = New-Object Windows.Media.LinearGradientBrush
+        $brush.StartPoint = [Windows.Point]::new(0,0); $brush.EndPoint = [Windows.Point]::new(1,0)
+        [void]$brush.GradientStops.Add([Windows.Media.GradientStop]::new((ConvertTo-BannerColor $palette.Start),0))
+        [void]$brush.GradientStops.Add([Windows.Media.GradientStop]::new((ConvertTo-BannerColor $palette.End),1))
+        $swatch.Background = $brush
+        $sample = New-Object Windows.Controls.TextBlock
+        $sample.Text = if ($item.Id -eq 'RagdollCat') { '布偶猫 · 动态横幅' } else { '⚡  美化模式 已开启' }
+        $sample.FontSize = 12; $sample.FontWeight = 'SemiBold'; $sample.HorizontalAlignment = 'Center'; $sample.VerticalAlignment = 'Center'
+        $sample.Foreground = New-Object Windows.Media.SolidColorBrush((ConvertTo-BannerColor $palette.Foreground))
+        $swatch.Child = $sample
+        $name = New-Object Windows.Controls.TextBlock
+        $name.Text = $item.Name; $name.FontSize = 14; $name.FontWeight = 'SemiBold'; $name.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#3E2A33')
+        $detail = New-Object Windows.Controls.TextBlock
+        $detail.Text = $item.Detail; $detail.FontSize = 11; $detail.Margin = [Windows.Thickness]::new(0,3,0,0); $detail.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#8B7A85')
+        [void]$content.Children.Add($swatch); [void]$content.Children.Add($name); [void]$content.Children.Add($detail)
+        $card.Content = $content
+        [void]$state.Cards.Add($card); [void]$cards.Children.Add($card)
+        $card.Add_Click({
+            param($sender, $e)
+            $selection = $sender.Tag.State
+            $selection.SelectedId = $sender.Tag.Item.Id
+            foreach ($other in $selection.Cards) {
+                $selected = $other.Tag.Item.Id -eq $selection.SelectedId
+                $other.BorderBrush = [Windows.Media.BrushConverter]::new().ConvertFromString($(if ($selected) { '#EE6FA8' } else { '#EFC7D9' }))
+                $other.Background = [Windows.Media.BrushConverter]::new().ConvertFromString($(if ($selected) { '#FBE3EE' } else { '#FFFFFF' }))
+            }
+            $selection.SelectionText.Text = '当前选择：' + $sender.Tag.Item.Name + '（点击保存后生效）'
+            Show-ModeBanner '美化模式 已开启 · 预览' 'on' $selection.SelectedId
+        })
+        Attach-HoverScale $card
+        if ($item.Id -eq $state.SelectedId) {
+            $card.Background = [Windows.Media.BrushConverter]::new().ConvertFromString('#FBE3EE')
+            $card.BorderBrush = [Windows.Media.BrushConverter]::new().ConvertFromString('#EE6FA8')
+            $selectionText.Text = '当前皮肤：' + $item.Name
+        }
+    }
+    $onButton = $picker.FindName('PreviewSkinOnButton')
+    $offButton = $picker.FindName('PreviewSkinOffButton')
+    $saveSkinButton = $picker.FindName('SaveSkinButton')
+    $cancelSkinButton = $picker.FindName('CancelSkinButton')
+    $onButton.Tag = $state; $offButton.Tag = $state
+    $saveSkinButton.Tag = [pscustomobject]@{ State = $state; Picker = $picker }
+    $onButton.Add_Click({ param($sender, $e) Show-ModeBanner '美化模式 已开启 · 预览' 'on' $sender.Tag.SelectedId })
+    $offButton.Add_Click({ param($sender, $e) Show-ModeBanner '美化模式 已关闭 · 预览' 'off' $sender.Tag.SelectedId })
+    $saveSkinButton.Add_Click({
+        param($sender, $e)
+        $oldSkin = $settings.BannerSkin
+        try {
+            $settings.BannerSkin = $sender.Tag.State.SelectedId
+            Save-AllProfiles
+            Set-Validation '✓ 横幅皮肤已保存，下次切换快捷键即可看到。' 'ok'
+            $sender.Tag.Picker.DialogResult = $true
+        } catch {
+            $settings.BannerSkin = $oldSkin
+            [System.Windows.MessageBox]::Show(('皮肤保存失败：' + $_.Exception.Message), '横幅皮肤', 'OK', 'Error') | Out-Null
+        }
+    })
+    $cancelSkinButton.Add_Click({ param($sender, $e) [Windows.Window]::GetWindow($sender).Close() })
+    foreach ($button in @($onButton, $offButton, $saveSkinButton, $cancelSkinButton)) { Attach-HoverScale $button }
+    [void]$picker.ShowDialog()
 }
 
 function Show-Settings {
@@ -1314,6 +1571,7 @@ $deleteShortcutButton.Add_Click({
         Set-Validation '快捷键已删除' 'ok'
     } catch { Set-Validation ('删除失败：' + $_.Exception.Message) 'error' }
 })
+$skinButton.Add_Click({ try { Show-SkinPicker } catch { Set-Validation ('打开皮肤失败：' + $_.Exception.Message) 'error' } })
 $settingsButton.Add_Click({ try { Show-Settings } catch { Set-Validation ('打开设置失败：' + $_.Exception.Message) 'error' } })
 
 Add-Type @'

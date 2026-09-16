@@ -5,3 +5,8 @@ bin/
 TranslucentTB-portable-x64/
 launcher.log
 instance.pid
+shortcuts.json
+build/
+*.zip
+smoke-*/
+OneL-cat-*.wav
