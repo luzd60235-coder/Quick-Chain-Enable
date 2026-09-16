@@ -43,6 +43,19 @@ if (-not [OneClickInstance]::Acquire()) {
     [Environment]::Exit(0)
 }
 
+# The UI is hosted by powershell.exe, so without an explicit identity the
+# taskbar groups this window under the generic PowerShell icon.  Claim our own
+# AppUserModelID so the taskbar button uses the OneL window icon instead.
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class OneLAppId {
+  [DllImport("shell32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
+}
+'@
+[void][OneLAppId]::SetCurrentProcessExplicitAppUserModelID('OneL.DesktopBeautify')
+
 $appRoot = Split-Path -Parent $PSCommandPath
 $dataRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'OneClickBeautify'
 $probePath = Join-Path $dataRoot ([IO.Path]::GetRandomFileName())
@@ -62,9 +75,50 @@ $xaml = @'
   <Window.Resources>
     <Style TargetType="Button">
       <Setter Property="FontSize" Value="13"/>
-      <Setter Property="Padding" Value="14,7"/>
+      <Setter Property="Padding" Value="16,8"/>
       <Setter Property="Margin" Value="0,0,8,0"/>
       <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid>
+              <Border Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="999"/>
+              <Border Name="pressMask" Background="#28000000" CornerRadius="999" Opacity="0"/>
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="pressMask" Property="Opacity" Value="1"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="ListBoxItem">
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border Name="itemBg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="999" Padding="{TemplateBinding Padding}">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="itemBg" Property="Background" Value="#FDF0F6"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="itemBg" Property="Background" Value="#FBE3EE"/>
+                <Setter TargetName="itemBg" Property="BorderBrush" Value="#F2A9C6"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
   </Window.Resources>
   <Grid Margin="22">
@@ -187,44 +241,31 @@ $settingsButton = $window.FindName('SettingsButton')
 $saveButton = $window.FindName('SaveButton')
 $deleteShortcutButton = $window.FindName('DeleteShortcutButton')
 
-# --- Jelly hover: every button wobbles back and forth like jelly when the
-# pointer enters.  Rotation plus inverse X/Y scale keyframes give the squishy
-# bounce; re-entering mid-wobble restarts the animation (SnapshotAndReplace).
-function New-JellyKeyFrameAnimation([double[]]$values, [int]$totalMs) {
-    $anim = New-Object System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames
-    $anim.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds($totalMs))
-    $anim.FillBehavior = 'Stop'
-    $step = [int]($totalMs / ($values.Count - 1))
-    for ($i = 0; $i -lt $values.Count; $i++) {
-        $frame = New-Object System.Windows.Media.Animation.LinearDoubleKeyFrame([double]$values[$i], [System.Windows.Media.Animation.KeyTime]::FromTimeSpan([TimeSpan]::FromMilliseconds($i * $step)))
-        [void]$anim.KeyFrames.Add($frame)
+# --- Hover scale: buttons gently grow while the pointer is over them and
+# shrink back on leave.  The pressed-state darkening is handled by the pill
+# ControlTemplate's pressMask overlay.
+function Start-HoverScale($button, [double]$target) {
+    $st = $button.RenderTransform.Children[0]
+    $ease = New-Object System.Windows.Media.Animation.CubicEase
+    $ease.EasingMode = 'EaseOut'
+    foreach ($prop in @([System.Windows.Media.ScaleTransform]::ScaleXProperty, [System.Windows.Media.ScaleTransform]::ScaleYProperty)) {
+        $anim = New-Object System.Windows.Media.Animation.DoubleAnimation
+        $anim.To = $target
+        $anim.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(170))
+        $anim.EasingFunction = $ease
+        $st.BeginAnimation($prop, $anim)
     }
-    return $anim
 }
 
-function Attach-JellyHover($button) {
+function Attach-HoverScale($button) {
     $button.RenderTransformOrigin = [Windows.Point]::new(0.5, 0.5)
     $group = New-Object System.Windows.Media.TransformGroup
     [void]$group.Children.Add((New-Object System.Windows.Media.ScaleTransform(1, 1)))
-    [void]$group.Children.Add((New-Object System.Windows.Media.RotateTransform(0)))
     $button.RenderTransform = $group
-    $button.Add_MouseEnter({
-        param($sender, $e)
-        $sb = New-Object System.Windows.Media.Animation.Storyboard
-        $tracks = @(
-            @{ Path='RenderTransform.Children[1].Angle';  Values=@(0,-5,4,-2.5,1.5,-0.6,0) },
-            @{ Path='RenderTransform.Children[0].ScaleX'; Values=@(1,1.07,0.95,1.035,0.98,1.01,1) },
-            @{ Path='RenderTransform.Children[0].ScaleY'; Values=@(1,0.94,1.07,0.965,1.03,0.99,1) }
-        )
-        foreach ($track in $tracks) {
-            $anim = New-JellyKeyFrameAnimation $track.Values 420
-            [System.Windows.Media.Animation.Storyboard]::SetTargetProperty($anim, (New-Object System.Windows.PropertyPath($track.Path)))
-            [void]$sb.Children.Add($anim)
-        }
-        $sb.Begin($sender, $true)
-    })
+    $button.Add_MouseEnter({ param($sender, $e) Start-HoverScale $sender 1.06 })
+    $button.Add_MouseLeave({ param($sender, $e) Start-HoverScale $sender 1.0 })
 }
-foreach ($jellyButton in @($addShortcutButton, $settingsButton, $saveButton, $deleteShortcutButton)) { Attach-JellyHover $jellyButton }
+foreach ($hoverButton in @($addShortcutButton, $settingsButton, $saveButton, $deleteShortcutButton)) { Attach-HoverScale $hoverButton }
 
 function Get-InstalledApps {
     $items = [System.Collections.ArrayList]::new()
@@ -556,6 +597,102 @@ function Show-TrayStatus([string]$message, [string]$kind = 'info') {
 
 function Format-RegistrationErrors($errors) {
     return (@($errors | ForEach-Object { if ($_.Display) { $_.Display } else { [string]$_ } }) -join '、')
+}
+
+$script:bannerWindow = $null
+function Show-ModeBanner([string]$text, [string]$kind) {
+    # Soft pill banner sliding in at the top-center of the work area to
+    # announce a mode switch: pink-cyan gradient for "on", white-pink for
+    # "off".  Fades in, holds two seconds, fades out; never steals focus.
+    try {
+        if ($script:bannerWindow) { try { $script:bannerWindow.Close() } catch { } }
+        $w = New-Object System.Windows.Window
+        $w.WindowStyle = [System.Windows.WindowStyle]::None
+        $w.ResizeMode = [System.Windows.ResizeMode]::NoResize
+        $w.AllowsTransparency = $true
+        $w.Background = [System.Windows.Media.Brushes]::Transparent
+        $w.Topmost = $true
+        $w.ShowInTaskbar = $false
+        $w.ShowActivated = $false
+        $w.IsHitTestVisible = $false
+        $w.SizeToContent = [System.Windows.SizeToContent]::WidthAndHeight
+        $border = New-Object System.Windows.Controls.Border
+        $border.CornerRadius = [System.Windows.CornerRadius]::new(21)
+        $border.Padding = [System.Windows.Thickness]::new(22, 10, 22, 10)
+        $grad = New-Object System.Windows.Media.LinearGradientBrush
+        $grad.StartPoint = [System.Windows.Point]::new(0, 0)
+        $grad.EndPoint = [System.Windows.Point]::new(1, 0)
+        if ($kind -eq 'on') {
+            [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new([System.Windows.Media.Color]::FromRgb(238, 111, 168), 0))
+            [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new([System.Windows.Media.Color]::FromRgb(53, 160, 184), 1))
+            $fg = [System.Windows.Media.Brushes]::White
+            $shadowColor = [System.Windows.Media.Color]::FromRgb(238, 111, 168)
+        } else {
+            [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new([System.Windows.Media.Color]::FromRgb(255, 255, 255), 0))
+            [void]$grad.GradientStops.Add([System.Windows.Media.GradientStop]::new([System.Windows.Media.Color]::FromRgb(251, 227, 238), 1))
+            $fg = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(62, 42, 51))
+            $shadowColor = [System.Windows.Media.Color]::FromRgb(190, 160, 180)
+        }
+        $border.Background = $grad
+        $shadow = New-Object System.Windows.Media.Effects.DropShadowEffect
+        $shadow.BlurRadius = 24; $shadow.ShadowDepth = 0; $shadow.Opacity = 0.35; $shadow.Color = $shadowColor
+        $border.Effect = $shadow
+        $stack = New-Object System.Windows.Controls.StackPanel
+        $stack.Orientation = [System.Windows.Controls.Orientation]::Horizontal
+        $glyph = New-Object System.Windows.Controls.TextBlock
+        $glyph.Text = if ($kind -eq 'on') { '⚡' } else { '✓' }
+        $glyph.FontSize = 17; $glyph.Foreground = $fg; $glyph.VerticalAlignment = 'Center'; $glyph.Margin = [System.Windows.Thickness]::new(0, 0, 10, 0)
+        $label = New-Object System.Windows.Controls.TextBlock
+        $label.Text = $text; $label.FontSize = 16; $label.FontWeight = [System.Windows.FontWeights]::SemiBold; $label.Foreground = $fg; $label.VerticalAlignment = 'Center'
+        [void]$stack.Children.Add($glyph); [void]$stack.Children.Add($label)
+        $border.Child = $stack
+        $w.Content = $border
+        $w.Add_ContentRendered({
+            param($sender, $e)
+            try {
+                $wa = [System.Windows.SystemParameters]::WorkArea
+                $sender.Left = $wa.X + ($wa.Width - $sender.ActualWidth) / 2
+                $sender.Top = $wa.Y + 26
+            } catch { }
+        })
+        $w.Add_Closed({ param($sender, $e) if ($script:bannerWindow -eq $sender) { $script:bannerWindow = $null } })
+        $tt = New-Object System.Windows.Media.TranslateTransform(0, -14)
+        $border.RenderTransform = $tt
+        $w.Opacity = 0
+        $script:bannerWindow = $w
+        $w.Show()
+        $ease = New-Object System.Windows.Media.Animation.CubicEase
+        $ease.EasingMode = 'EaseOut'
+        $fade = New-Object System.Windows.Media.Animation.DoubleAnimation
+        $fade.To = 1
+        $fade.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(240))
+        $fade.EasingFunction = $ease
+        $w.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fade)
+        $slide = New-Object System.Windows.Media.Animation.DoubleAnimation
+        $slide.To = 0
+        $slide.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(320))
+        $slide.EasingFunction = $ease
+        $tt.BeginAnimation([System.Windows.Media.TranslateTransform]::YProperty, $slide)
+        $timer = New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval = [TimeSpan]::FromMilliseconds(2000)
+        $timer.Add_Tick({
+            param($s, $e)
+            $s.Stop()
+            $win = $script:bannerWindow
+            if (-not $win) { return }
+            try {
+                $out = New-Object System.Windows.Media.Animation.DoubleAnimation
+                $out.To = 0
+                $out.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds(420))
+                $win.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $out)
+            } catch { }
+            $closer = New-Object System.Windows.Threading.DispatcherTimer
+            $closer.Interval = [TimeSpan]::FromMilliseconds(480)
+            $closer.Add_Tick({ param($c, $e2) $c.Stop(); try { if ($script:bannerWindow) { $script:bannerWindow.Close() } } catch { } })
+            $closer.Start()
+        })
+        $timer.Start()
+    } catch { }
 }
 
 function Show-SaveFeedback([string]$message, [string]$kind = 'ok', [bool]$forceNotification = $false) {
@@ -892,6 +1029,7 @@ function Invoke-Profile($profile) {
             [void]$script:activeProfiles.Remove($profileId)
             Update-DesktopPresentation
             Set-Validation "已关闭 [$($profile.Name)]" 'ok'
+            Show-ModeBanner "$($profile.Name) 已关闭" 'off'
             return
         }
 
@@ -917,6 +1055,7 @@ function Invoke-Profile($profile) {
         } else {
             Set-Validation "已启用 [$($profile.Name)]" 'ok'
         }
+        Show-ModeBanner "$($profile.Name) 已开启" 'on'
     } catch { Set-Validation ('执行失败：' + $_.Exception.Message) 'error' }
 }
 
@@ -953,6 +1092,31 @@ function Set-StartWithWindows([bool]$enabled) {
 function Show-Settings {
     $settingsXaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="设置" Width="520" Height="430" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#FDF2F7" FontFamily="Segoe UI">
+  <Window.Resources>
+    <Style TargetType="Button">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Padding" Value="16,8"/>
+      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid>
+              <Border Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="999"/>
+              <Border Name="pressMask" Background="#28000000" CornerRadius="999" Opacity="0"/>
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="pressMask" Property="Opacity" Value="1"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
   <Border Margin="18" Background="White" BorderBrush="#F3D9E5" BorderThickness="1" CornerRadius="8" Padding="24">
     <DockPanel>
       <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
@@ -982,7 +1146,7 @@ function Show-Settings {
     $configPathText = $settingsWindow.FindName('ConfigPathText')
     $saveSettingsButton = $settingsWindow.FindName('SaveSettingsButton')
     $cancelSettingsButton = $settingsWindow.FindName('CancelSettingsButton')
-    foreach ($jellyButton in @($saveSettingsButton, $cancelSettingsButton)) { Attach-JellyHover $jellyButton }
+    foreach ($hoverButton in @($saveSettingsButton, $cancelSettingsButton)) { Attach-HoverScale $hoverButton }
     $startToggle.IsChecked = $settings.StartWithWindows
     $minimizedToggle.IsChecked = $settings.StartMinimized
     $notificationToggle.IsChecked = $settings.ShowSaveNotification

@@ -7,7 +7,7 @@
   "targets": {
     ".NETCoreApp,Version=v8.0": {},
     ".NETCoreApp,Version=v8.0/win-x86": {
-      "一键桌面美化/1.0.3": {
+      "一键桌面美化/1.0.4": {
         "runtime": {
           "一键桌面美化.dll": {}
         }
@@ -15,7 +15,7 @@
     }
   },
   "libraries": {
-    "一键桌面美化/1.0.3": {
+    "一键桌面美化/1.0.4": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
