@@ -18,12 +18,12 @@ public static class OneClickInstance {
     return created;
   }
   public static bool ActivateExisting() {
-    IntPtr hwnd = FindWindow(null, "一键桌面美化");
+    IntPtr hwnd = FindWindow(null, "OneL");
     if (hwnd == IntPtr.Zero) {
       EnumWindows((candidate, unused) => {
         var title = new System.Text.StringBuilder(128);
         GetWindowText(candidate, title, title.Capacity);
-        if (title.ToString() == "一键桌面美化") { hwnd = candidate; return false; }
+        if (title.ToString() == "OneL") { hwnd = candidate; return false; }
         return true;
       }, IntPtr.Zero);
     }
@@ -38,7 +38,7 @@ public static class OneClickInstance {
 '@
 if (-not [OneClickInstance]::Acquire()) {
     if (-not [OneClickInstance]::ActivateExisting()) {
-        [System.Windows.Forms.MessageBox]::Show('一键桌面美化已经在后台运行，但找不到窗口。请在任务管理器中结束旧实例后重试。', '一键桌面美化', 'OK', 'Warning') | Out-Null
+        [System.Windows.Forms.MessageBox]::Show('OneL 已经在后台运行，但找不到窗口。请在任务管理器中结束旧实例后重试。', 'OneL', 'OK', 'Warning') | Out-Null
     }
     [Environment]::Exit(0)
 }
@@ -58,7 +58,7 @@ $configPath = Join-Path $dataRoot 'shortcuts.json'
 $legacyConfigPath = Join-Path $appRoot 'shortcut-config.json'
 
 $xaml = @'
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="一键桌面美化" Width="1080" Height="720" MinWidth="900" MinHeight="600" WindowStartupLocation="CenterScreen" Background="#F3F5F8" FontFamily="Segoe UI">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="OneL" Width="1080" Height="720" MinWidth="900" MinHeight="600" WindowStartupLocation="CenterScreen" Background="#FDF2F7" FontFamily="Segoe UI">
   <Window.Resources>
     <Style TargetType="Button">
       <Setter Property="FontSize" Value="13"/>
@@ -71,50 +71,50 @@ $xaml = @'
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <DockPanel Grid.Row="0" Margin="0,0,0,18">
       <StackPanel DockPanel.Dock="Left">
-        <TextBlock Text="一键桌面美化" FontSize="26" FontWeight="SemiBold" Foreground="#17202A"/>
-        <TextBlock Text="把常用桌面状态收进快捷键，工作和美化一键切换" Margin="0,5,0,0" Foreground="#718096" FontSize="13"/>
+        <TextBlock Text="OneL" FontSize="26" FontWeight="SemiBold" Foreground="#3E2A33"/>
+        <TextBlock Text="把常用桌面状态收进快捷键，工作和美化一键切换" Margin="0,5,0,0" Foreground="#8B7A85" FontSize="13"/>
       </StackPanel>
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-        <Button Name="AddShortcutButton" Content="＋ 新增快捷键" Background="#5B8DEF" Foreground="White" BorderThickness="0" ToolTip="创建一组新的快捷键配置"/>
-        <Button Name="SettingsButton" Content="⚙ 设置" Background="White" Foreground="#344054" BorderBrush="#D6DCE5" ToolTip="打开软件设置"/>
+        <Button Name="AddShortcutButton" Content="＋ 新增快捷键" Background="#EE6FA8" Foreground="White" BorderThickness="0" ToolTip="创建一组新的快捷键配置"/>
+        <Button Name="SettingsButton" Content="⚙ 设置" Background="White" Foreground="#4A3A42" BorderBrush="#EFC7D9" ToolTip="打开软件设置"/>
       </StackPanel>
     </DockPanel>
     <Grid Grid.Row="1">
       <Grid.ColumnDefinitions><ColumnDefinition Width="285"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <Border Grid.Column="0" Background="White" BorderBrush="#E1E6ED" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,16,0">
+      <Border Grid.Column="0" Background="White" BorderBrush="#F3D9E5" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,16,0">
         <DockPanel>
           <StackPanel DockPanel.Dock="Top" Margin="4,2,4,12">
-            <TextBlock Text="我的快捷键" FontSize="17" FontWeight="SemiBold" Foreground="#17202A"/>
-            <TextBlock Name="ShortcutCountText" Text="0 组配置" Foreground="#8895A7" FontSize="12" Margin="0,4,0,0"/>
+            <TextBlock Text="我的快捷键" FontSize="17" FontWeight="SemiBold" Foreground="#3E2A33"/>
+            <TextBlock Name="ShortcutCountText" Text="0 组配置" Foreground="#9A8794" FontSize="12" Margin="0,4,0,0"/>
           </StackPanel>
           <ListBox Name="ShortcutList" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
         </DockPanel>
       </Border>
-      <Border Grid.Column="1" Background="White" BorderBrush="#E1E6ED" BorderThickness="1" CornerRadius="8" Padding="24">
+      <Border Grid.Column="1" Background="White" BorderBrush="#F3D9E5" BorderThickness="1" CornerRadius="8" Padding="24">
         <Grid>
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
           <DockPanel Grid.Row="0" Margin="0,0,0,18">
             <StackPanel DockPanel.Dock="Left">
-              <TextBlock Text="当前快捷键" Foreground="#8895A7" FontSize="12"/>
-              <TextBlock Name="SelectedTitle" Text="未选择快捷键" FontSize="23" FontWeight="SemiBold" Foreground="#17202A" Margin="0,3,0,0"/>
+              <TextBlock Text="当前快捷键" Foreground="#9A8794" FontSize="12"/>
+              <TextBlock Name="SelectedTitle" Text="未选择快捷键" FontSize="23" FontWeight="SemiBold" Foreground="#3E2A33" Margin="0,3,0,0"/>
             </StackPanel>
             <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
-              <TextBlock Text="组合键" Foreground="#8895A7" FontSize="11" HorizontalAlignment="Right"/>
-              <TextBlock Name="SelectedHotkey" Text="未设置" Foreground="#3767B0" FontSize="19" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="0,3,0,0"/>
+              <TextBlock Text="组合键" Foreground="#9A8794" FontSize="11" HorizontalAlignment="Right"/>
+              <TextBlock Name="SelectedHotkey" Text="未设置" Foreground="#35A0B8" FontSize="19" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="0,3,0,0"/>
             </StackPanel>
           </DockPanel>
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-              <Border Background="#F7F9FC" BorderBrush="#E5EAF0" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,0,14">
+              <Border Background="#FBF4F7" BorderBrush="#E7F3F6" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,0,14">
                 <StackPanel>
-                  <TextBlock Text="快捷键信息" FontSize="15" FontWeight="SemiBold" Foreground="#17202A"/>
-                  <TextBlock Text="名称会显示在左侧列表中，点击列表项即可编辑它。" Foreground="#718096" FontSize="12" Margin="0,5,0,14"/>
-                  <TextBlock Text="快捷键名称" Foreground="#556274" FontSize="12"/>
+                  <TextBlock Text="快捷键信息" FontSize="15" FontWeight="SemiBold" Foreground="#3E2A33"/>
+                  <TextBlock Text="名称会显示在左侧列表中，点击列表项即可编辑它。" Foreground="#8B7A85" FontSize="12" Margin="0,5,0,14"/>
+                  <TextBlock Text="快捷键名称" Foreground="#6E5A66" FontSize="12"/>
                   <TextBox Name="ShortcutNameBox" Height="36" Margin="0,6,0,14" Padding="10,7" FontSize="15" MaxLength="40" ToolTip="给这组启动动作取一个名字"/>
                   <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                      <TextBlock Text="组合键" Foreground="#556274" FontSize="12"/>
+                      <TextBlock Text="组合键" Foreground="#6E5A66" FontSize="12"/>
                       <ComboBox Name="ModifierBox" Height="36" Margin="0,6,0,0" SelectedIndex="1">
                         <ComboBoxItem Content="Ctrl + Alt" Tag="CtrlAlt"/>
                         <ComboBoxItem Content="Ctrl + Alt + Shift" Tag="CtrlAltShift"/>
@@ -124,32 +124,32 @@ $xaml = @'
                       </ComboBox>
                     </StackPanel>
                     <StackPanel Grid.Column="1">
-                      <TextBlock Text="主键" Foreground="#556274" FontSize="12"/>
+                      <TextBlock Text="主键" Foreground="#6E5A66" FontSize="12"/>
                       <TextBox Name="KeyBox" Height="36" Margin="0,6,0,0" Padding="10,7" FontSize="16" MaxLength="1" ToolTip="输入一个字母或数字"/>
                     </StackPanel>
                   </Grid>
-                  <TextBlock Name="ValidationText" Text="" FontSize="14" FontWeight="SemiBold" Foreground="#718096" TextWrapping="Wrap" Margin="0,10,0,0"/>
+                  <TextBlock Name="ValidationText" Text="" FontSize="14" FontWeight="SemiBold" Foreground="#8B7A85" TextWrapping="Wrap" Margin="0,10,0,0"/>
                 </StackPanel>
               </Border>
-              <TextBlock Text="启动内容" FontSize="15" FontWeight="SemiBold" Foreground="#17202A" Margin="2,2,0,10"/>
-              <TextBlock Text="已安装软件会自动列出，可滚动选择需要一起启动的应用" Foreground="#8895A7" FontSize="12" Margin="2,0,0,12"/>
+              <TextBlock Text="启动内容" FontSize="15" FontWeight="SemiBold" Foreground="#3E2A33" Margin="2,2,0,10"/>
+              <TextBlock Text="已安装软件会自动列出，可滚动选择需要一起启动的应用" Foreground="#9A8794" FontSize="12" Margin="2,0,0,12"/>
               <StackPanel Name="SoftwareList">
-                <Border Background="White" BorderBrush="#E5EAF0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
-                  <CheckBox Name="DesktopIconsToggle" Content="隐藏桌面图标" IsChecked="False" FontSize="14" Foreground="#17202A"/>
+                <Border Background="White" BorderBrush="#E7F3F6" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                  <CheckBox Name="DesktopIconsToggle" Content="隐藏桌面图标" IsChecked="False" FontSize="14" Foreground="#3E2A33"/>
                 </Border>
-                <Border Background="White" BorderBrush="#E5EAF0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
-                  <CheckBox Name="TaskbarToggle" Content="隐藏任务栏" IsChecked="False" FontSize="14" Foreground="#17202A"/>
+                <Border Background="White" BorderBrush="#E7F3F6" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                  <CheckBox Name="TaskbarToggle" Content="隐藏任务栏" IsChecked="False" FontSize="14" Foreground="#3E2A33"/>
                 </Border>
-                <Border Background="White" BorderBrush="#E5EAF0" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
-                  <CheckBox Name="AutoHideTaskbarToggle" Content="自动隐藏任务栏" IsChecked="False" FontSize="14" Foreground="#17202A" ToolTip="开启后任务栏收起，鼠标移到屏幕底部自动浮现；关闭则任务栏始终显示。与「隐藏任务栏」互斥。"/>
+                <Border Background="White" BorderBrush="#E7F3F6" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                  <CheckBox Name="AutoHideTaskbarToggle" Content="自动隐藏任务栏" IsChecked="False" FontSize="14" Foreground="#3E2A33" ToolTip="开启后任务栏收起，鼠标移到屏幕底部自动浮现；关闭则任务栏始终显示。与「隐藏任务栏」互斥。"/>
                 </Border>
               </StackPanel>
             </StackPanel>
           </ScrollViewer>
           <DockPanel Grid.Row="2" Margin="0,18,0,0">
-            <Button Name="DeleteShortcutButton" Content="删除当前快捷键" DockPanel.Dock="Left" Background="White" Foreground="#C24141" BorderBrush="#E6B7B7"/>
+            <Button Name="DeleteShortcutButton" Content="删除当前快捷键" DockPanel.Dock="Left" Background="White" Foreground="#D14D70" BorderBrush="#F2C3D2"/>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-              <Button Name="SaveButton" Content="保存快捷键" Background="#5B8DEF" Foreground="White" BorderThickness="0" FontWeight="SemiBold" Margin="0"/>
+              <Button Name="SaveButton" Content="保存快捷键" Background="#EE6FA8" Foreground="White" BorderThickness="0" FontWeight="SemiBold" Margin="0"/>
             </StackPanel>
           </DockPanel>
         </Grid>
@@ -161,7 +161,7 @@ $xaml = @'
 
 $reader = New-Object System.Xml.XmlNodeReader ([xml]$xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
-$iconPath = Join-Path $appRoot 'QuickLaunchCenter.ico'
+$iconPath = Join-Path $appRoot 'OneL.ico'
 if (Test-Path -LiteralPath $iconPath) {
     $iconStream = [IO.File]::OpenRead($iconPath)
     try {
@@ -186,6 +186,45 @@ $addShortcutButton = $window.FindName('AddShortcutButton')
 $settingsButton = $window.FindName('SettingsButton')
 $saveButton = $window.FindName('SaveButton')
 $deleteShortcutButton = $window.FindName('DeleteShortcutButton')
+
+# --- Jelly hover: every button wobbles back and forth like jelly when the
+# pointer enters.  Rotation plus inverse X/Y scale keyframes give the squishy
+# bounce; re-entering mid-wobble restarts the animation (SnapshotAndReplace).
+function New-JellyKeyFrameAnimation([double[]]$values, [int]$totalMs) {
+    $anim = New-Object System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames
+    $anim.Duration = New-Object System.Windows.Duration([TimeSpan]::FromMilliseconds($totalMs))
+    $anim.FillBehavior = 'Stop'
+    $step = [int]($totalMs / ($values.Count - 1))
+    for ($i = 0; $i -lt $values.Count; $i++) {
+        $frame = New-Object System.Windows.Media.Animation.LinearDoubleKeyFrame([double]$values[$i], [System.Windows.Media.Animation.KeyTime]::FromTimeSpan([TimeSpan]::FromMilliseconds($i * $step)))
+        [void]$anim.KeyFrames.Add($frame)
+    }
+    return $anim
+}
+
+function Attach-JellyHover($button) {
+    $button.RenderTransformOrigin = [Windows.Point]::new(0.5, 0.5)
+    $group = New-Object System.Windows.Media.TransformGroup
+    [void]$group.Children.Add((New-Object System.Windows.Media.ScaleTransform(1, 1)))
+    [void]$group.Children.Add((New-Object System.Windows.Media.RotateTransform(0)))
+    $button.RenderTransform = $group
+    $button.Add_MouseEnter({
+        param($sender, $e)
+        $sb = New-Object System.Windows.Media.Animation.Storyboard
+        $tracks = @(
+            @{ Path='RenderTransform.Children[1].Angle';  Values=@(0,-5,4,-2.5,1.5,-0.6,0) },
+            @{ Path='RenderTransform.Children[0].ScaleX'; Values=@(1,1.07,0.95,1.035,0.98,1.01,1) },
+            @{ Path='RenderTransform.Children[0].ScaleY'; Values=@(1,0.94,1.07,0.965,1.03,0.99,1) }
+        )
+        foreach ($track in $tracks) {
+            $anim = New-JellyKeyFrameAnimation $track.Values 420
+            [System.Windows.Media.Animation.Storyboard]::SetTargetProperty($anim, (New-Object System.Windows.PropertyPath($track.Path)))
+            [void]$sb.Children.Add($anim)
+        }
+        $sb.Begin($sender, $true)
+    })
+}
+foreach ($jellyButton in @($addShortcutButton, $settingsButton, $saveButton, $deleteShortcutButton)) { Attach-JellyHover $jellyButton }
 
 function Get-InstalledApps {
     $items = [System.Collections.ArrayList]::new()
@@ -466,7 +505,7 @@ $checks = @{}
 foreach ($app in $apps) {
     $panel = New-Object System.Windows.Controls.Border
     $panel.Background = [Windows.Media.Brushes]::White
-    $panel.BorderBrush = [Windows.Media.BrushConverter]::new().ConvertFromString('#E5EAF0')
+    $panel.BorderBrush = [Windows.Media.BrushConverter]::new().ConvertFromString('#E7F3F6')
     $panel.BorderThickness = [Windows.Thickness]::new(1)
     $panel.CornerRadius = [Windows.CornerRadius]::new(6)
     $panel.Padding = [Windows.Thickness]::new(14)
@@ -478,9 +517,9 @@ foreach ($app in $apps) {
     [System.Windows.Automation.AutomationProperties]::SetName($check, $app.Name)
     [System.Windows.Automation.AutomationProperties]::SetAutomationId($check, ('AppToggle_' + ($app.Name -replace '[^A-Za-z0-9_]', '_')))
     $name = New-Object System.Windows.Controls.TextBlock
-    $name.Text = $app.Name; $name.FontSize = 15; $name.FontWeight = 'SemiBold'; $name.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#17202A')
+    $name.Text = $app.Name; $name.FontSize = 15; $name.FontWeight = 'SemiBold'; $name.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#3E2A33')
     $desc = New-Object System.Windows.Controls.TextBlock
-    $desc.Text = $app.Description; $desc.FontSize = 12; $desc.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#718096'); $desc.Margin = [Windows.Thickness]::new(0,3,0,0)
+    $desc.Text = $app.Description; $desc.FontSize = 12; $desc.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#8B7A85'); $desc.Margin = [Windows.Thickness]::new(0,3,0,0)
     $textStack = New-Object System.Windows.Controls.StackPanel
     [void]$textStack.Children.Add($name); [void]$textStack.Children.Add($desc)
     [void]$row.Children.Add($check); [void]$row.Children.Add($textStack)
@@ -503,13 +542,13 @@ $script:trayIcon = $null
 
 function Set-Validation([string]$message, [string]$kind = 'normal') {
     $validationText.Text = $message
-    $color = switch ($kind) { 'ok' { '#2F855A' }; 'warn' { '#B7791F' }; 'error' { '#C24141' }; default { '#718096' } }
+    $color = switch ($kind) { 'ok' { '#2F855A' }; 'warn' { '#B7791F' }; 'error' { '#D14D70' }; default { '#8B7A85' } }
     $validationText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString($color)
 }
 
 function Show-TrayStatus([string]$message, [string]$kind = 'info') {
     if (-not $script:trayIcon -or -not $script:trayIcon.Visible) { return }
-    $script:trayIcon.BalloonTipTitle = '一键桌面美化'
+    $script:trayIcon.BalloonTipTitle = 'OneL'
     $script:trayIcon.BalloonTipText = $message
     $script:trayIcon.BalloonTipIcon = if ($kind -eq 'error') { [System.Windows.Forms.ToolTipIcon]::Error } elseif ($kind -eq 'warn') { [System.Windows.Forms.ToolTipIcon]::Warning } else { [System.Windows.Forms.ToolTipIcon]::Info }
     $script:trayIcon.ShowBalloonTip(5000)
@@ -523,7 +562,7 @@ function Show-SaveFeedback([string]$message, [string]$kind = 'ok', [bool]$forceN
     Set-Validation $message $kind
     if ($forceNotification -or $settings.ShowSaveNotification) {
         $icon = if ($kind -eq 'error') { 'Error' } elseif ($kind -eq 'warn') { 'Warning' } else { 'Information' }
-        [System.Windows.MessageBox]::Show($message, '一键桌面美化', 'OK', $icon) | Out-Null
+        [System.Windows.MessageBox]::Show($message, 'OneL', 'OK', $icon) | Out-Null
     }
 }
 
@@ -541,15 +580,15 @@ function Show-MainWindow {
 
 function Initialize-TrayIcon {
     $tray = New-Object System.Windows.Forms.NotifyIcon
-    $tray.Text = '一键桌面美化'
-    $iconPath = Join-Path $appRoot 'QuickLaunchCenter.ico'
+    $tray.Text = 'OneL'
+    $iconPath = Join-Path $appRoot 'OneL.ico'
     try {
         if (Test-Path -LiteralPath $iconPath) { $tray.Icon = New-Object System.Drawing.Icon($iconPath) }
         else { $tray.Icon = [System.Drawing.SystemIcons]::Application }
     } catch { $tray.Icon = [System.Drawing.SystemIcons]::Application }
 
     $menu = New-Object System.Windows.Forms.ContextMenuStrip
-    $showItem = $menu.Items.Add('打开一键桌面美化')
+    $showItem = $menu.Items.Add('打开 OneL')
     $exitItem = $menu.Items.Add('退出程序')
     $showItem.Add_Click({ Show-MainWindow })
     $exitItem.Add_Click({
@@ -577,14 +616,14 @@ function Refresh-ShortcutList {
             $item.Padding = [Windows.Thickness]::new(12,10,10,10)
             $item.Margin = [Windows.Thickness]::new(0,0,0,6)
             $item.BorderThickness = [Windows.Thickness]::new(1)
-            $item.BorderBrush = [Windows.Media.BrushConverter]::new().ConvertFromString('#E8ECF1')
+            $item.BorderBrush = [Windows.Media.BrushConverter]::new().ConvertFromString('#F4E1EA')
             $item.Background = [Windows.Media.Brushes]::White
             $item.Tag = $i
             $stack = New-Object System.Windows.Controls.StackPanel
             $nameText = New-Object System.Windows.Controls.TextBlock
-            $nameText.Text = $profile.Name; $nameText.FontSize = 15; $nameText.FontWeight = 'SemiBold'; $nameText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#17202A')
+            $nameText.Text = $profile.Name; $nameText.FontSize = 15; $nameText.FontWeight = 'SemiBold'; $nameText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#3E2A33')
             $hotkeyText = New-Object System.Windows.Controls.TextBlock
-            $hotkeyText.Text = Get-ProfileHotkey $profile; $hotkeyText.FontSize = 12; $hotkeyText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#5B76A3'); $hotkeyText.Margin = [Windows.Thickness]::new(0,4,0,0)
+            $hotkeyText.Text = Get-ProfileHotkey $profile; $hotkeyText.FontSize = 12; $hotkeyText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#4E9FB5'); $hotkeyText.Margin = [Windows.Thickness]::new(0,4,0,0)
             [void]$stack.Children.Add($nameText); [void]$stack.Children.Add($hotkeyText)
             $item.Content = $stack
             [void]$shortcutList.Items.Add($item)
@@ -905,31 +944,31 @@ function Set-StartWithWindows([bool]$enabled) {
     $runPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
     $valueName = 'OneClickBeautify'
     if ($enabled) {
-        $exe = Join-Path $appRoot '一键桌面美化.exe'
-        if (-not (Test-Path -LiteralPath $exe)) { $exe = Join-Path $appRoot '一键美化.exe' }
+        $exe = Join-Path $appRoot 'OneL.exe'
+        if (-not (Test-Path -LiteralPath $exe)) { $exe = Join-Path $appRoot '一键桌面美化.exe' }
         if (Test-Path -LiteralPath $exe) { New-Item -Path $runPath -Force | Out-Null; Set-ItemProperty -Path $runPath -Name $valueName -Value ('"' + $exe + '"') }
     } else { Remove-ItemProperty -Path $runPath -Name $valueName -ErrorAction SilentlyContinue }
 }
 
 function Show-Settings {
     $settingsXaml = @'
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="设置" Width="520" Height="430" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F3F5F8" FontFamily="Segoe UI">
-  <Border Margin="18" Background="White" BorderBrush="#E1E6ED" BorderThickness="1" CornerRadius="8" Padding="24">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="设置" Width="520" Height="430" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#FDF2F7" FontFamily="Segoe UI">
+  <Border Margin="18" Background="White" BorderBrush="#F3D9E5" BorderThickness="1" CornerRadius="8" Padding="24">
     <DockPanel>
       <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
-        <Button Name="CancelSettingsButton" Content="取消" Background="White" BorderBrush="#D6DCE5"/>
-        <Button Name="SaveSettingsButton" Content="保存设置" Background="#5B8DEF" Foreground="White" BorderThickness="0" Margin="0"/>
+        <Button Name="CancelSettingsButton" Content="取消" Background="White" BorderBrush="#EFC7D9"/>
+        <Button Name="SaveSettingsButton" Content="保存设置" Background="#EE6FA8" Foreground="White" BorderThickness="0" Margin="0"/>
       </StackPanel>
       <StackPanel>
-        <TextBlock Text="设置" FontSize="23" FontWeight="SemiBold" Foreground="#17202A"/>
-        <TextBlock Text="让快捷键中心更贴合你的工作习惯" Foreground="#718096" FontSize="13" Margin="0,5,0,22"/>
+        <TextBlock Text="设置" FontSize="23" FontWeight="SemiBold" Foreground="#3E2A33"/>
+        <TextBlock Text="让快捷键中心更贴合你的工作习惯" Foreground="#8B7A85" FontSize="13" Margin="0,5,0,22"/>
         <CheckBox Name="StartWithWindowsToggle" Content="随 Windows 启动" FontSize="14" Margin="0,0,0,16"/>
-        <TextBlock Text="登录系统后自动打开快捷键中心，快捷键才能随时待命。" Foreground="#8895A7" FontSize="12" TextWrapping="Wrap" Margin="24,-10,0,18"/>
+        <TextBlock Text="登录系统后自动打开快捷键中心，快捷键才能随时待命。" Foreground="#9A8794" FontSize="12" TextWrapping="Wrap" Margin="24,-10,0,18"/>
         <CheckBox Name="StartMinimizedToggle" Content="启动时最小化窗口" FontSize="14" Margin="0,0,0,16"/>
-        <TextBlock Text="减少桌面占用，需要编辑时可从任务栏恢复。" Foreground="#8895A7" FontSize="12" TextWrapping="Wrap" Margin="24,-10,0,18"/>
+        <TextBlock Text="减少桌面占用，需要编辑时可从任务栏恢复。" Foreground="#9A8794" FontSize="12" TextWrapping="Wrap" Margin="24,-10,0,18"/>
         <CheckBox Name="ShowSaveNotificationToggle" Content="保存后显示状态提示" FontSize="14" Margin="0,0,0,22"/>
-        <TextBlock Text="配置文件位置" Foreground="#556274" FontSize="12"/>
-        <TextBox Name="ConfigPathText" IsReadOnly="True" Background="#F7F9FC" BorderBrush="#E5EAF0" Margin="0,6,0,0" Padding="8"/>
+        <TextBlock Text="配置文件位置" Foreground="#6E5A66" FontSize="12"/>
+        <TextBox Name="ConfigPathText" IsReadOnly="True" Background="#FBF4F7" BorderBrush="#E7F3F6" Margin="0,6,0,0" Padding="8"/>
       </StackPanel>
     </DockPanel>
   </Border>
@@ -943,6 +982,7 @@ function Show-Settings {
     $configPathText = $settingsWindow.FindName('ConfigPathText')
     $saveSettingsButton = $settingsWindow.FindName('SaveSettingsButton')
     $cancelSettingsButton = $settingsWindow.FindName('CancelSettingsButton')
+    foreach ($jellyButton in @($saveSettingsButton, $cancelSettingsButton)) { Attach-JellyHover $jellyButton }
     $startToggle.IsChecked = $settings.StartWithWindows
     $minimizedToggle.IsChecked = $settings.StartMinimized
     $notificationToggle.IsChecked = $settings.ShowSaveNotification
