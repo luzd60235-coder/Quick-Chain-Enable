@@ -83,8 +83,8 @@ $xaml = @'
         <Setter.Value>
           <ControlTemplate TargetType="Button">
             <Grid>
-              <Border Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="999"/>
-              <Border Name="pressMask" Background="#28000000" CornerRadius="999" Opacity="0"/>
+              <Border Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="17"/>
+              <Border Name="pressMask" Background="#28000000" CornerRadius="17" Opacity="0"/>
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
             </Grid>
             <ControlTemplate.Triggers>
@@ -104,7 +104,7 @@ $xaml = @'
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="ListBoxItem">
-            <Border Name="itemBg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="999" Padding="{TemplateBinding Padding}">
+            <Border Name="itemBg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="30" Padding="{TemplateBinding Padding}">
               <ContentPresenter/>
             </Border>
             <ControlTemplate.Triggers>
@@ -120,6 +120,51 @@ $xaml = @'
         </Setter.Value>
       </Setter>
     </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="#C0FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#EFC7D9"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18">
+              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="Background" Value="#C0FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#EFC7D9"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <Border Name="cbBg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="18"/>
+              <ToggleButton Name="cbToggle" Focusable="False" ClickMode="Press" Background="Transparent" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="Transparent"/>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+              </ToggleButton>
+              <ContentPresenter Margin="18,0,36,0" VerticalAlignment="Center" HorizontalAlignment="Left" Content="{TemplateBinding SelectionBoxItem}" IsHitTestVisible="False"/>
+              <Path Data="M0,0 L9,0 L4.5,5.5 Z" Fill="#8B7A85" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" IsHitTestVisible="False"/>
+              <Popup AllowsTransparency="True" Focusable="False" Placement="Bottom" PopupAnimation="Slide" IsOpen="{TemplateBinding IsDropDownOpen}">
+                <Border Background="White" BorderBrush="#F3D9E5" BorderThickness="1" CornerRadius="12" SnapsToDevicePixels="True" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                  <ScrollViewer MaxHeight="240">
+                    <ItemsPresenter Margin="4"/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
   <Grid Margin="22">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -129,8 +174,8 @@ $xaml = @'
         <TextBlock Text="把常用桌面状态收进快捷键，工作和美化一键切换" Margin="0,5,0,0" Foreground="#8B7A85" FontSize="13"/>
       </StackPanel>
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-        <Button Name="AddShortcutButton" Content="＋ 新增快捷键" Background="#EE6FA8" Foreground="White" BorderThickness="0" ToolTip="创建一组新的快捷键配置"/>
-        <Button Name="SettingsButton" Content="⚙ 设置" Background="White" Foreground="#4A3A42" BorderBrush="#EFC7D9" ToolTip="打开软件设置"/>
+        <Button Name="AddShortcutButton" Content="＋ 新增快捷键" Background="#C0EE6FA8" Foreground="White" BorderThickness="0" ToolTip="创建一组新的快捷键配置"/>
+        <Button Name="SettingsButton" Content="⚙ 设置" Background="#C0FFFFFF" Foreground="#4A3A42" BorderBrush="#EFC7D9" ToolTip="打开软件设置"/>
       </StackPanel>
     </DockPanel>
     <Grid Grid.Row="1">
@@ -164,7 +209,7 @@ $xaml = @'
                   <TextBlock Text="快捷键信息" FontSize="15" FontWeight="SemiBold" Foreground="#3E2A33"/>
                   <TextBlock Text="名称会显示在左侧列表中，点击列表项即可编辑它。" Foreground="#8B7A85" FontSize="12" Margin="0,5,0,14"/>
                   <TextBlock Text="快捷键名称" Foreground="#6E5A66" FontSize="12"/>
-                  <TextBox Name="ShortcutNameBox" Height="36" Margin="0,6,0,14" Padding="10,7" FontSize="15" MaxLength="40" ToolTip="给这组启动动作取一个名字"/>
+                  <TextBox Name="ShortcutNameBox" Height="36" Margin="0,6,0,14" Padding="18,7" FontSize="15" MaxLength="40" ToolTip="给这组启动动作取一个名字"/>
                   <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" Margin="0,0,12,0">
@@ -179,7 +224,7 @@ $xaml = @'
                     </StackPanel>
                     <StackPanel Grid.Column="1">
                       <TextBlock Text="主键" Foreground="#6E5A66" FontSize="12"/>
-                      <TextBox Name="KeyBox" Height="36" Margin="0,6,0,0" Padding="10,7" FontSize="16" MaxLength="1" ToolTip="输入一个字母或数字"/>
+                      <TextBox Name="KeyBox" Height="36" Margin="0,6,0,0" Padding="18,7" FontSize="16" MaxLength="1" ToolTip="输入一个字母或数字"/>
                     </StackPanel>
                   </Grid>
                   <TextBlock Name="ValidationText" Text="" FontSize="14" FontWeight="SemiBold" Foreground="#8B7A85" TextWrapping="Wrap" Margin="0,10,0,0"/>
@@ -201,9 +246,9 @@ $xaml = @'
             </StackPanel>
           </ScrollViewer>
           <DockPanel Grid.Row="2" Margin="0,18,0,0">
-            <Button Name="DeleteShortcutButton" Content="删除当前快捷键" DockPanel.Dock="Left" Background="White" Foreground="#D14D70" BorderBrush="#F2C3D2"/>
+            <Button Name="DeleteShortcutButton" Content="删除当前快捷键" DockPanel.Dock="Left" Background="#C0FFFFFF" Foreground="#D14D70" BorderBrush="#F2C3D2"/>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-              <Button Name="SaveButton" Content="保存快捷键" Background="#EE6FA8" Foreground="White" BorderThickness="0" FontWeight="SemiBold" Margin="0"/>
+              <Button Name="SaveButton" Content="保存快捷键" Background="#C0EE6FA8" Foreground="White" BorderThickness="0" FontWeight="SemiBold" Margin="0"/>
             </StackPanel>
           </DockPanel>
         </Grid>
@@ -1103,8 +1148,8 @@ function Show-Settings {
         <Setter.Value>
           <ControlTemplate TargetType="Button">
             <Grid>
-              <Border Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="999"/>
-              <Border Name="pressMask" Background="#28000000" CornerRadius="999" Opacity="0"/>
+              <Border Name="bg" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="17"/>
+              <Border Name="pressMask" Background="#28000000" CornerRadius="17" Opacity="0"/>
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
             </Grid>
             <ControlTemplate.Triggers>
@@ -1116,12 +1161,27 @@ function Show-Settings {
         </Setter.Value>
       </Setter>
     </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="#C0FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#EFC7D9"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18">
+              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
   <Border Margin="18" Background="White" BorderBrush="#F3D9E5" BorderThickness="1" CornerRadius="8" Padding="24">
     <DockPanel>
       <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
-        <Button Name="CancelSettingsButton" Content="取消" Background="White" BorderBrush="#EFC7D9"/>
-        <Button Name="SaveSettingsButton" Content="保存设置" Background="#EE6FA8" Foreground="White" BorderThickness="0" Margin="0"/>
+        <Button Name="CancelSettingsButton" Content="取消" Background="#C0FFFFFF" BorderBrush="#EFC7D9"/>
+        <Button Name="SaveSettingsButton" Content="保存设置" Background="#C0EE6FA8" Foreground="White" BorderThickness="0" Margin="0"/>
       </StackPanel>
       <StackPanel>
         <TextBlock Text="设置" FontSize="23" FontWeight="SemiBold" Foreground="#3E2A33"/>
@@ -1132,7 +1192,7 @@ function Show-Settings {
         <TextBlock Text="减少桌面占用，需要编辑时可从任务栏恢复。" Foreground="#9A8794" FontSize="12" TextWrapping="Wrap" Margin="24,-10,0,18"/>
         <CheckBox Name="ShowSaveNotificationToggle" Content="保存后显示状态提示" FontSize="14" Margin="0,0,0,22"/>
         <TextBlock Text="配置文件位置" Foreground="#6E5A66" FontSize="12"/>
-        <TextBox Name="ConfigPathText" IsReadOnly="True" Background="#FBF4F7" BorderBrush="#E7F3F6" Margin="0,6,0,0" Padding="8"/>
+        <TextBox Name="ConfigPathText" IsReadOnly="True" Background="#C0FBF4F7" BorderBrush="#E7F3F6" Margin="0,6,0,0" Padding="18,8"/>
       </StackPanel>
     </DockPanel>
   </Border>
