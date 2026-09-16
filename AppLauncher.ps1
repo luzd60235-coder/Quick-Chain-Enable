@@ -128,8 +128,8 @@ $xaml = @'
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TextBox">
-            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18">
-              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18" Padding="18,0">
+              <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" VerticalAlignment="Center"/>
             </Border>
           </ControlTemplate>
         </Setter.Value>
@@ -502,6 +502,7 @@ function New-Profile([string]$name = '新快捷键', [string]$tag = 'CtrlAltShif
         DesktopIcons = $false
         Taskbar = $false
         AutoHideTaskbar = $false
+        Pending = $false
         Apps = $appState
     }
 }
@@ -517,6 +518,7 @@ function ConvertTo-Profile($source) {
     $profile.DesktopIcons = [bool](Get-ConfigValue $source 'DesktopIcons' $false)
     $profile.Taskbar = [bool](Get-ConfigValue $source 'Taskbar' $false)
     $profile.AutoHideTaskbar = [bool](Get-ConfigValue $source 'AutoHideTaskbar' $false)
+    $profile.Pending = [bool](Get-ConfigValue $source 'Pending' $false)
     $savedApps = Get-ConfigValue $source 'Apps' $null
     foreach ($app in $apps) { $profile.Apps[$app.Name] = [bool](Get-ConfigValue $savedApps $app.Name $false) }
     return $profile
@@ -564,6 +566,7 @@ function Save-AllProfiles {
             DesktopIcons = [bool]$_.DesktopIcons
             Taskbar = [bool]$_.Taskbar
             AutoHideTaskbar = [bool]$_.AutoHideTaskbar
+            Pending = [bool]$_.Pending
             Apps = $appState
         }
     })
@@ -585,6 +588,18 @@ function Get-ProfileHotkey($profile) {
     $label = if ($item) { $item.Content.ToString() } else { 'Ctrl + Alt + Shift' }
     $key = if ([string]::IsNullOrWhiteSpace($profile.Key)) { '?' } else { $profile.Key.ToUpperInvariant() }
     return "$label + $key"
+}
+
+function Update-SelectedHotkeyDisplay($profile) {
+    # A freshly added profile still carries the placeholder combination until
+    # the user saves; show a neutral hint instead of a misleading shortcut.
+    if ($profile.Pending) {
+        $selectedHotkey.Text = '暂未设置快捷键组合'
+        $selectedHotkey.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#9A8794')
+    } else {
+        $selectedHotkey.Text = Get-ProfileHotkey $profile
+        $selectedHotkey.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#35A0B8')
+    }
 }
 
 $checks = @{}
@@ -805,7 +820,14 @@ function Refresh-ShortcutList {
             $nameText = New-Object System.Windows.Controls.TextBlock
             $nameText.Text = $profile.Name; $nameText.FontSize = 15; $nameText.FontWeight = 'SemiBold'; $nameText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#3E2A33')
             $hotkeyText = New-Object System.Windows.Controls.TextBlock
-            $hotkeyText.Text = Get-ProfileHotkey $profile; $hotkeyText.FontSize = 12; $hotkeyText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#4E9FB5'); $hotkeyText.Margin = [Windows.Thickness]::new(0,4,0,0)
+            if ($profile.Pending) {
+                $hotkeyText.Text = '暂未设置'
+                $hotkeyText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#9A8794')
+            } else {
+                $hotkeyText.Text = Get-ProfileHotkey $profile
+                $hotkeyText.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString('#4E9FB5')
+            }
+            $hotkeyText.FontSize = 12; $hotkeyText.Margin = [Windows.Thickness]::new(0,4,0,0)
             [void]$stack.Children.Add($nameText); [void]$stack.Children.Add($hotkeyText)
             $item.Content = $stack
             [void]$shortcutList.Items.Add($item)
@@ -832,7 +854,7 @@ function Set-UiFromProfile($profile) {
     $autoHideTaskbarToggle.IsChecked = [bool]$profile.AutoHideTaskbar
     foreach ($app in $apps) { $checks[$app.Name].IsChecked = [bool]$profile.Apps[$app.Name] }
     $selectedTitle.Text = $profile.Name
-    $selectedHotkey.Text = Get-ProfileHotkey $profile
+    Update-SelectedHotkeyDisplay $profile
     Set-Validation ''
 }
 
@@ -1108,12 +1130,13 @@ function Save-CurrentProfile {
     if ($selectedIndex -lt 0 -or $selectedIndex -ge $profiles.Count) { throw '请先选择一个快捷键。' }
     $profile = $profiles[$selectedIndex]
     Capture-UiToProfile $profile
+    $profile.Pending = $false
     $settings.LastSelectedId = $profile.Id
     Save-AllProfiles
     $errors = @(Register-AllHotkeys)
     Refresh-ShortcutList
     $selectedTitle.Text = $profile.Name
-    $selectedHotkey.Text = Get-ProfileHotkey $profile
+    Update-SelectedHotkeyDisplay $profile
     if ($errors.Count -gt 0) {
         Show-SaveFeedback ('配置已保存，但快捷键没有全部启用：' + (Format-RegistrationErrors $errors) + '。旧快捷键已保留。') 'warn' $true
     } else {
@@ -1169,8 +1192,8 @@ function Show-Settings {
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="TextBox">
-            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18">
-              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18" Padding="18,0">
+              <ScrollViewer x:Name="PART_ContentHost" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" VerticalAlignment="Center"/>
             </Border>
           </ControlTemplate>
         </Setter.Value>
@@ -1243,6 +1266,7 @@ $shortcutNameBox.Add_TextChanged({
 })
 $modifierBox.Add_SelectionChanged({
     if ($selectedIndex -ge 0 -and $selectedIndex -lt $profiles.Count) {
+        if ($profiles[$selectedIndex].Pending) { return }
         $tag = if ($modifierBox.SelectedItem) { $modifierBox.SelectedItem.Tag.ToString() } else { 'CtrlAltShift' }
         $preview = $profiles[$selectedIndex].PSObject.Copy(); $preview.ModifierTag = $tag; $preview.Key = $keyBox.Text.Trim().ToUpperInvariant()
         $selectedHotkey.Text = Get-ProfileHotkey $preview
@@ -1252,6 +1276,7 @@ $modifierBox.Add_SelectionChanged({
 $keyBox.AddHandler([System.Windows.UIElement]::PreviewKeyDownEvent, [System.Windows.Input.KeyEventHandler]{ param($sender,$e); if ($e.Key -notin @('Left','Right','Up','Down','Tab','Enter')) { $keyBox.Text = $e.Key.ToString().Replace('D',''); $e.Handled = $true } })
 $keyBox.Add_TextChanged({
     if ($selectedIndex -ge 0 -and $selectedIndex -lt $profiles.Count) {
+        if ($profiles[$selectedIndex].Pending) { return }
         $preview = $profiles[$selectedIndex].PSObject.Copy(); $preview.ModifierTag = if ($modifierBox.SelectedItem) { $modifierBox.SelectedItem.Tag.ToString() } else { 'CtrlAltShift' }; $preview.Key = $keyBox.Text.Trim().ToUpperInvariant()
         $selectedHotkey.Text = Get-ProfileHotkey $preview
         if ($selectedIndex -lt $listRows.Count) { $listRows[$selectedIndex].HotkeyText.Text = Get-ProfileHotkey $preview }
@@ -1264,6 +1289,7 @@ $addShortcutButton.Add_Click({
     try {
         if ($selectedIndex -ge 0 -and $selectedIndex -lt $profiles.Count) { Capture-UiToProfile $profiles[$selectedIndex] }
         $newProfile = New-Profile "快捷键 $($profiles.Count + 1)" 'CtrlAlt' 'P'
+        $newProfile.Pending = $true
         [void]$profiles.Add($newProfile)
         $selectedIndex = $profiles.Count - 1
         $settings.LastSelectedId = $newProfile.Id
